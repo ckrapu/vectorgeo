@@ -1,0 +1,11 @@
+{
+    "input_shape": [32, 32, 23],
+    "K": 2,
+    "z_dim": 16,
+    "num_filters": 16,
+    "n_linear": 16,
+    "epochs": 2,
+    "batch_size": 128,
+    "convert_one_hot": true,
+    "max_n_train" : 1000
+}
