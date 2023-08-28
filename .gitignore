@@ -1,7 +1,7 @@
 data/
 .DS_Store
 .ipynb_checkpoints
-
+.metaflow/
 figures/
 vg-venv/
 __pycache__/

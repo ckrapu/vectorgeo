@@ -11,11 +11,11 @@ pip install -r requirements.txt
 
 ## Workflow
 
-For convenience, you can execute the notebooks as scripts:
+### Testing
 ```
-jupyter nbconvert --execute 00-sample-triplets-landcover.ipynb
-jupyter nbconvert --execute 01-train-triplets.ipynb
-jupyter nbconvert --execute 02-h3-inference.ipynb
+python flow_preprocess.py --no-pylint run --n_files=2 --n_jobs=1
+python flow_train.py --no-pylint run --epochs=1 --n_train_files=2 
+
 ```
 
 ```

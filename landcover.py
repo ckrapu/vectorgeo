@@ -1,18 +1,15 @@
-import rasterio
-import boto3
-import botocore
-import geopandas as gpd
+
 import constants as c
+
 import h3
-import pandas as pd
 import numpy as np
 import os
+import logging
+import rasterio
+
 from pyproj import Transformer
 from rasterstats import zonal_stats
 from tqdm import trange
-import logging
-import yaml
-import time
 
 def unpack_array(xs):
     '''

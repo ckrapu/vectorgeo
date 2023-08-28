@@ -1,5 +1,4 @@
 from tensorflow.keras import layers, Model, Sequential
-from tensorflow.keras.layers import Input, Lambda
 import tensorflow as tf
 
 
@@ -85,7 +84,7 @@ class ResnetTripletEmbedding(Model):
     """
     def __init__(self, input_shape, K, z_dim, num_filters, n_linear, num_dense_blocks=2):
 
-        self.input_layer = Input(shape=input_shape)
+        self.input_layer = layers.Input(shape=input_shape)
         x = self.input_layer
         
         # Extract # of downsamples based on input shape
@@ -161,7 +160,7 @@ def triplet_loss(y_true, y_pred, alpha=0.4, eta=0.1):
 
     return loss
 
-def initalize_triplet(input_shape, n_conv_blocks, embed_dim, num_filters, n_linear):
+def initialize_triplet(input_shape, n_conv_blocks, embed_dim, num_filters, n_linear):
     # Create the embedding model
     embedding_network = ResnetTripletEmbedding(
         input_shape, K=n_conv_blocks,
@@ -170,9 +169,9 @@ def initalize_triplet(input_shape, n_conv_blocks, embed_dim, num_filters, n_line
         n_linear=n_linear)
 
     # Define triplet inputs
-    anchor_input   = Input(shape=input_shape, name="anchor_input")
-    positive_input = Input(shape=input_shape, name="positive_input")
-    negative_input = Input(shape=input_shape, name="negative_input")
+    anchor_input   = layers.Input(shape=input_shape, name="anchor_input")
+    positive_input = layers.Input(shape=input_shape, name="positive_input")
+    negative_input = layers.Input(shape=input_shape, name="negative_input")
 
     # Process the triplets through the embedding network
     anchor_embedding   = embedding_network(anchor_input)
