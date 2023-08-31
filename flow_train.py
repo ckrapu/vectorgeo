@@ -11,22 +11,17 @@ from metaflow import (
 
 import os
 import constants as c
-import yaml
 import numpy as np
-import s3fs
-import boto3
 import matplotlib.pyplot as plt
 
 from matplotlib import gridspec
 from sklearn.decomposition import PCA
-from models import initialize_triplet
 from umap import UMAP
 from tqdm import tqdm
 
-from landcover import unpack_array
-
-
-
+from vectorgeo.models import initialize_triplet
+from vectorgeo.landcover import unpack_array
+from vectorgeo import data_utils
 
 class TrainLandCoverTripletFlow(FlowSpec):
     """
@@ -77,47 +72,28 @@ class TrainLandCoverTripletFlow(FlowSpec):
         default= "resnet-triplet-lc.keras"
     )
 
-
     @step
     def start(self):
         """
         Loads the training files from S3 and starts the training process.
         """
 
-        with open('.secrets.yml', 'r') as f:
-            secrets = yaml.safe_load(f)
-
-        # Initialize s3fs using aws_aceess_key_id and aws_secret_access_key
-        fs = s3fs.S3FileSystem(
-            key=secrets['aws_access_key_id'],
-            secret=secrets['aws_secret_access_key'],
-            client_kwargs={'region_name': c.S3_REGION}
-        )
-
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=secrets['aws_access_key_id'],
-            aws_secret_access_key=secrets['aws_secret_access_key'],
-            region_name=c.S3_REGION
-        )
+        # Get list of files in the S3 bucket
+        keys = data_utils.ls_s3('landcover/')
+        keys = list(filter(lambda x: x.endswith('.npy'), keys))
+        print('Found {} files'.format(len(keys)))
 
 
-        # Read all files in the bucket c.S3_BUCKET and key 'landcover' with file extension .npy
-        # and store them in a list
-        files = fs.ls(os.path.join(c.S3_BUCKET, 'landcover'))
-        files = [f for f in files if f.endswith('.npy')]
-        print('Found {} files'.format(len(files)))
+        keys = keys[0:self.n_train_files]
+        print(f"Preparing to read {len(keys)} files")
 
         arrays = []
-
-        files_to_read = files[0:self.n_train_files]
-        print(f"Preparing to read {len(files_to_read)} files")
-
-        for f in files_to_read:
+        for key in keys:
+            local_filepath = os.path.join(c.TMP_DIR, os.path.basename(key))
+            data_utils.download_file(key, local_filepath)
             # Read each file in the list and append it to the arrays list
-            print('....Reading {}'.format(f))
-            arrays.append(np.load(fs.open(f)))
-
+            print('....Reading {}'.format(key))
+            arrays.append(np.load(local_filepath))
 
         # Convert from integer to one-hot encoding
         # We don't preprocess as one-hot because the storage is way larger.
@@ -132,7 +108,6 @@ class TrainLandCoverTripletFlow(FlowSpec):
         # to use for downstream information content
         # assessment with PCA
         self.test_batch = xs_one_hot[0:1024, 0]
-
         self.next(self.train_embedding_model)
 
     @step
@@ -163,14 +138,11 @@ class TrainLandCoverTripletFlow(FlowSpec):
 
         """
 
-        secrets = yaml.load(open(os.path.join(c.BASE_DIR, '.secrets.yml')), Loader=yaml.FullLoader)
-
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=secrets['aws_access_key_id'],
-            aws_secret_access_key=secrets['aws_secret_access_key'],
-            region_name=c.S3_REGION
-        )
+        # Save the model to S3
+        model_path = os.path.join(c.TMP_DIR, self.model_filename)
+        self.embedding_network.save(model_path) 
+        data_utils.upload_file(f"models/{self.model_filename}", model_path)
+        
         zs = self.embedding_network(self.test_batch).numpy()
 
         # transform with pca
@@ -220,11 +192,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
         # Show the plot
         plt.savefig("figures/embeddings.png")
 
-        # Save the model to S3
-        model_path = os.path.join('temp', self.model_filename)
-        self.embedding_network.save(model_path) 
-        s3_client.upload_file(model_path, c.S3_BUCKET, f"models/{self.model_filename}")
-        os.remove(model_path)
+        
 
 if __name__ == "__main__":
     TrainLandCoverTripletFlow()

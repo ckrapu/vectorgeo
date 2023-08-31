@@ -8,17 +8,14 @@ from metaflow import (
     Parameter,  # pylint: disable=no-name-in-module
     step,
 )
-from metaflow.cards import Table
 
-import geopandas as gpd
-import os
-import constants as c
-import yaml
-import s3fs
-import boto3
-from landcover import LandCoverPatches
 import time
 import numpy as np
+import geopandas as gpd
+import os
+from vectorgeo import landcover as lc
+from vectorgeo import constants as c
+from vectorgeo import data_utils
 
 class PreprocessLandCoverFlow(FlowSpec):
     """
@@ -52,12 +49,6 @@ class PreprocessLandCoverFlow(FlowSpec):
         'pair_distance_meters', 
         help='Maximum istance between centroids of pairs of anchor/neighbor images in meters', 
         default=8000)
-
-    mask_by_borders = Parameter(
-        'mask_by_borders',
-        help='Whether to only use patches that fall within national borders; setting to False will use \
-              all patches, even if they fall in the ocean',
-        default=True)
     
     @step
     def start(self):
@@ -65,23 +56,11 @@ class PreprocessLandCoverFlow(FlowSpec):
         Loads the boundary shapefile for all countries and starts the sampler.
         """
 
-        with open('.secrets.yml', 'r') as f:
-            secrets = yaml.safe_load(f)
-
-        fs = s3fs.S3FileSystem(
-            key=secrets['aws_access_key_id'],
-            secret=secrets['aws_secret_access_key'],
-            client_kwargs={'region_name': 'us-east-1'}
-        )
-
-
         # Shapefile with a single geometry indicating boundaries / coastlines for all countries
-        key = 'misc/world.gpkg'
-        try:
-            with fs.open(key, 'rb') as f:
-                self.world_gdf = gpd.read_file(f)
-        except:
-            self.world_gdf = gpd.read_file('data/world.gpkg')
+        world_key, world_path = 'misc/world.gpkg', os.path.join(c.TMP_DIR, 'world.gpkg')
+        data_utils.download_file(world_key, world_path)
+        
+        self.world_gdf = gpd.read_file(world_path, driver='GPKG')
 
         self.job_ids = range(self.n_jobs)
         self.int_map = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
@@ -93,22 +72,17 @@ class PreprocessLandCoverFlow(FlowSpec):
         Run the sampler in parallel across different jobs to iteratively samples of neighboring
         land cover patches and store them as Numpy arrays on S3.
         """
-
-        with open('.secrets.yml', 'r') as f:
-            secrets = yaml.safe_load(f)
-
-        s3_client = boto3.client(
-            's3',
-            aws_access_key_id=secrets['aws_access_key_id'],
-            aws_secret_access_key=secrets['aws_secret_access_key'],
-            region_name='us-east-1'
-        )
-
         self.uploaded_filekeys = []
 
-        data_generator = LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.patch_size)
+        lc_key = 'raw/' + c.COPERNICUS_LC_KEY
+        data_utils.download_file(lc_key, c.LC_LOCAL_PATH)
+
+        print(f"Creating patch generator...")
+        data_generator = lc.LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.patch_size)
+
+        print(f"Generating {self.n_files} files with {self.samples_per_file} samples each...")
         for _ in range(self.n_files):
-            print(f"Generating file {_ + 1} of {self.n_files}...")
+            print(f"...Generating file {_ + 1} of {self.n_files}...")
             file_id                     = abs(hash(str(time.time()))) % (10 ** 6)
             all_patches, all_patch_nbrs = [], []
             all_pts, all_pt_nbrs        = [], []
@@ -137,12 +111,12 @@ class PreprocessLandCoverFlow(FlowSpec):
             patches_array = np.vectorize(self.int_map.get)(patches_array)
 
             filename = f'lulc-patches-pairs-{self.patch_size}x{self.patch_size}-{file_id}.npy'
-            key      = f'landcover/{filename}'
+            filepath = os.path.join(c.TMP_DIR, filename)
 
-            np.save(filename, patches_array)
-            s3_client.upload_file(filename, c.S3_BUCKET, key)
-            self.uploaded_filekeys.append(key)
-            os.remove(filename)
+            np.save(filepath, patches_array)
+            key = f"landcover/{filename}"
+            data_utils.upload_file(key, filepath)
+            self.uploaded_filekeys.append(filename)
 
         self.next(self.join)
 

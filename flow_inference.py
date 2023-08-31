@@ -1,9 +1,6 @@
-
-
 import os
 import yaml
 import numpy as np
-import boto3
 import tensorflow.keras as keras
 import h3
 import geopandas as gpd
@@ -15,11 +12,10 @@ from qdrant_client.http.models import Distance, VectorParams, PointStruct
 from shapely.geometry import Polygon
 
 import constants as c
+import data_utils
 
-from h3_utils import h3_global_iterator
-from landcover import LandCoverPatches
-
-
+from vectorgeo.h3_utils import h3_global_iterator
+from vectorgeo.landcover import LandCoverPatches
 
 class InferenceLandCoverFlow(FlowSpec):
 
@@ -73,40 +69,22 @@ class InferenceLandCoverFlow(FlowSpec):
 
         secrets = yaml.load(open(os.path.join(c.BASE_DIR, '.secrets.yml')), Loader=yaml.FullLoader)
 
-        s3 = boto3.client(
-            's3',
-            aws_access_key_id=secrets['aws_access_key_id'],
-            aws_secret_access_key=secrets['aws_secret_access_key']
-        )
-
-        bucket = c.S3_BUCKET
         key = f"models/{self.model_filename}"
+        local_model_path = os.path.join(c.TMP_DIR, self.model_filename)
+        data_utils.download_file(key, local_model_path)
 
-        # Download model file into temp/
-        with open(f"temp/{self.model_filename}", "wb") as f:
-            s3.download_fileobj(bucket, key, f)
-
-        model = keras.models.load_model(f"temp/{self.model_filename}")
-        print(f"Loaded model from {key} with output shape {model.output_shape}")
+        self.model = keras.models.load_model(local_model_path)
+        print(f"Loaded model from {key} with output shape {self.model.output_shape}")
 
         self.seed_latlngs_parallel = self.seed_latlngs
         
         # If desired, we use this geometry to mask out ocean or other areas far outside national boundaries.
-        
-        self.world_gdf = gpd.read_file('data/world.gpkg')
+        world_path = os.path.join(c.TMP_DIR, 'world.gpkg')
+        data_utils.download_file('misc/world.gpkg', world_path)
+        self.world_gdf = gpd.read_file(world_path)
         self.world_geom =self.world_gdf \
             .iloc[0].geometry \
             .simplify(0.1)
-        
-        # Download the model object from S3 and load it
-        bucket = c.S3_BUCKET
-        key = f"models/{self.model_filename}"
-
-        # Download model file into temp/
-        with open(f"temp/{self.model_filename}", "wb") as f:
-            s3.download_fileobj(bucket, key, f)
-
-        self.model = keras.models.load_model(f"temp/{self.model_filename}")
         
         if self.wipe_qdrant:
             print("Wiping Qdrant collection")
@@ -139,10 +117,10 @@ class InferenceLandCoverFlow(FlowSpec):
 
         seed_lat, seed_lng = seed_latlng
 
-        iterator = h3_global_iterator(seed_lat, seed_lng, self.h3_resolution)
+        iterator       = h3_global_iterator(seed_lat, seed_lng, self.h3_resolution)
         h3_batch       = []
         zs_batch       = []
-        h3s_processed = set()
+        h3s_processed  = set()
 
         # Our main inference loop runs over points and when enough valid point/image pairs
         # have been found, we run them through the embedding network and then upload
