@@ -15,7 +15,7 @@ import geopandas as gpd
 import os
 from vectorgeo import landcover as lc
 from vectorgeo import constants as c
-from vectorgeo import data_utils
+from vectorgeo import transfer
 
 class PreprocessLandCoverFlow(FlowSpec):
     """
@@ -58,7 +58,7 @@ class PreprocessLandCoverFlow(FlowSpec):
 
         # Shapefile with a single geometry indicating boundaries / coastlines for all countries
         world_key, world_path = 'misc/world.gpkg', os.path.join(c.TMP_DIR, 'world.gpkg')
-        data_utils.download_file(world_key, world_path)
+        transfer.download_file(world_key, world_path)
         
         self.world_gdf = gpd.read_file(world_path, driver='GPKG')
 
@@ -75,7 +75,7 @@ class PreprocessLandCoverFlow(FlowSpec):
         self.uploaded_filekeys = []
 
         lc_key = 'raw/' + c.COPERNICUS_LC_KEY
-        data_utils.download_file(lc_key, c.LC_LOCAL_PATH)
+        transfer.download_file(lc_key, c.LC_LOCAL_PATH)
 
         print(f"Creating patch generator...")
         data_generator = lc.LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.patch_size)
@@ -115,7 +115,7 @@ class PreprocessLandCoverFlow(FlowSpec):
 
             np.save(filepath, patches_array)
             key = f"landcover/{filename}"
-            data_utils.upload_file(key, filepath)
+            transfer.upload_file(key, filepath)
             self.uploaded_filekeys.append(filename)
 
         self.next(self.join)

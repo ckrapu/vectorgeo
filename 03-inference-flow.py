@@ -13,13 +13,12 @@ from tensorflow import keras
 
 
 import vectorgeo.constants as c
-import vectorgeo.data_utils as data_utils
+import vectorgeo.transfer as transfer
 
-from vectorgeo.h3_utils import h3_global_iterator
+from vectorgeo.h3_utils import H3GlobalIterator
 from vectorgeo.landcover import LandCoverPatches
 
 class InferenceLandCoverFlow(FlowSpec):
-
 
     wipe_qdrant = Parameter(
         'wipe_qdrant',
@@ -60,7 +59,16 @@ class InferenceLandCoverFlow(FlowSpec):
             #(-19.632875, 23.466110),    # Okavango Delta, Botswana
             ]
         )
+    
+    max_iters = Parameter(
+        'max_iters',
+        help='Maximum number of iterations to run',
+        default=None)
 
+    qdrant_collection = Parameter(
+        'qdrant_collection',
+        help='Name of the Qdrant collection to use',
+        default=c.QDRANT_COLLECTION_NAME)
     
     @step
     def start(self):
@@ -72,7 +80,7 @@ class InferenceLandCoverFlow(FlowSpec):
 
         key = f"models/{self.model_filename}"
         local_model_path = os.path.join(c.TMP_DIR, self.model_filename)
-        data_utils.download_file(key, local_model_path)
+        transfer.download_file(key, local_model_path)
 
         self.model = keras.models.load_model(local_model_path)
         print(f"Loaded model from {key} with output shape {self.model.output_shape}")
@@ -81,20 +89,20 @@ class InferenceLandCoverFlow(FlowSpec):
         
         # If desired, we use this geometry to mask out ocean or other areas far outside national boundaries.
         world_path = os.path.join(c.TMP_DIR, 'world.gpkg')
-        data_utils.download_file('misc/world.gpkg', world_path)
+        transfer.download_file('misc/world.gpkg', world_path)
         self.world_gdf = gpd.read_file(world_path)
         self.world_geom =self.world_gdf \
             .iloc[0].geometry \
             .simplify(0.1)
         
         if self.wipe_qdrant:
-            print("Wiping Qdrant collection")
+            print(f"Wiping Qdrant collection {self.qdrant_collection}")
             qdrant_client = QdrantClient(
                 url=secrets['qdrant_url'], 
                 api_key=secrets['qdrant_api_key']
             )
             qdrant_client.recreate_collection(
-                collection_name=c.QDRANT_COLLECTION_NAME,
+                collection_name=self.qdrant_collection,
                 vectors_config=VectorParams(size=self.embed_dim, distance=Distance.DOT),
             )
         self.next(self.run_inference, foreach='seed_latlngs_parallel')
@@ -111,14 +119,23 @@ class InferenceLandCoverFlow(FlowSpec):
             api_key=secrets['qdrant_api_key']
         )
 
-        lcp = LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.image_size)
+        lcp = LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.image_size, full_load=False)
 
         int_map       = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
         int_map_fn    = np.vectorize(int_map.get)
 
         seed_lat, seed_lng = self.input
 
-        iterator       = h3_global_iterator(seed_lat, seed_lng, self.h3_resolution)
+
+        state_filepath = os.path.join(c.TMP_DIR, f"h3-state.json")
+        try:
+            transfer.download_file('misc/h3-state.json',state_filepath)
+        except Exception as e:
+            print(f"Encountered exception {e} while downloading state file")
+            print("No state file found; starting from scratch")
+            pass
+
+        iterator       = H3GlobalIterator(seed_lat, seed_lng, self.h3_resolution, state_file=state_filepath )
         h3_batch       = []
         zs_batch       = []
         h3s_processed  = set()
@@ -126,53 +143,66 @@ class InferenceLandCoverFlow(FlowSpec):
         # Our main inference loop runs over points and when enough valid point/image pairs
         # have been found, we run them through the embedding network and then upload
         # the results to Qdrant.
-        print("Starting inference loop for job with seed coordinates", seed_lat, seed_lng )
-        for i, cell in enumerate(tqdm(iterator)):
-            if i % 1000 == 0:
-                print(f"Processing cell {i}: {cell}")
+        print("Starting inference loop for job with seed coordinates", seed_lat, seed_lng)
+        try:
+            for i, cell in enumerate(tqdm(iterator)):
+                if i % 1000 == 0:
+                    print(f"Processing cell {i}: {cell}")
+                
+                if self.max_iters and i >= int(self.max_iters):
+                    print(f"Reached max_iters {self.max_iters}; stopping")
+                    break
 
-            # Order of lat-lng vs lng-lat is reversed relative to what shapely expects
-            poly = Polygon((x,y) for y,x in h3.h3_to_geo_boundary(cell))
+                # Order of lat-lng vs lng-lat is reversed relative to what shapely expects
+                poly = Polygon((x,y) for y,x in h3.h3_to_geo_boundary(cell))
 
-            # This catches points that are in the middle of the ocean and lets
-            # us bypass running inference on them.
-            if not self.world_geom.intersects(poly):
-                h3s_processed.add(cell)
-                continue
+                # This catches points that are in the middle of the ocean and lets
+                # us bypass running inference on them.
+                if not self.world_geom.intersects(poly):
+                    h3s_processed.add(cell)
+                    continue
 
-            xs = int_map_fn(lcp.h3_to_patch(cell))
+                xs = int_map_fn(lcp.h3_to_patch(cell))
 
-            xs_one_hot = np.zeros((1, self.image_size, self.image_size, c.LC_N_CLASSES))
+                xs_one_hot = np.zeros((1, self.image_size, self.image_size, c.LC_N_CLASSES))
 
-            for i in range(c.LC_N_CLASSES):
-                xs_one_hot[..., i] = (xs == i).squeeze().astype(int)
+                for i in range(c.LC_N_CLASSES):
+                    xs_one_hot[..., i] = (xs == i).squeeze().astype(int)
 
-            zs = self.model(xs_one_hot).numpy().squeeze().tolist()
+                zs = self.model(xs_one_hot).numpy().squeeze().tolist()
 
-            h3_batch.append(cell)
-            zs_batch.append(zs)
-            
-            # Qdrant won't allow arbitrary string id fields, so 
-            # we convert the H3 index to an integer which is 
-            # allowed as an id field.
-            if len(zs_batch) >= self.inference_batch_size:
+                h3_batch.append(cell)
+                zs_batch.append(zs)
+                
+                # Qdrant won't allow arbitrary string id fields, so 
+                # we convert the H3 index to an integer which is 
+                # allowed as an id field.
+                if len(zs_batch) >= self.inference_batch_size:
 
-                coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
-                lats, lngs = zip(*coords)    
+                    coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
+                    lats, lngs = zip(*coords)    
 
-                _ = qdrant_client.upsert(
-                    collection_name=c.QDRANT_COLLECTION_NAME,
-                    wait=True,   
-                    points=[PointStruct(
-                        id=int("0x"+id, 0),
-                        vector=vector,
-                        payload={"location":{"lon": lng, "lat": lat}}
-                        ) for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
-                )
-                h3s_processed = h3s_processed.union(set(h3_batch))
-                h3_batch = []
-                zs_batch = []
+                    _ = qdrant_client.upsert(
+                        collection_name=c.QDRANT_COLLECTION_NAME,
+                        wait=True,   
+                        points=[PointStruct(
+                            id=int("0x"+id, 0),
+                            vector=vector,
+                            payload={"location":{"lon": lng, "lat": lat}}
+                            ) for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
+                    )
+                    h3s_processed = h3s_processed.union(set(h3_batch))
+                    h3_batch = []
+                    zs_batch = []
+        except KeyboardInterrupt:
+            print(f"Caught keyboard interrupt; stopping")
+        finally:
+            print(f"Saving state to {state_filepath}")
+            iterator.save_state()
+            transfer.upload_file(f"misc/h3-state.json", state_filepath)
 
+        # Keep track of which H3 cells we've processed so we don't
+        # process them again in the future.
         self.next(self.join)
 
     @step

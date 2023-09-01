@@ -19,7 +19,7 @@ from umap import UMAP
 
 from vectorgeo.models import initialize_triplet
 from vectorgeo.landcover import unpack_array
-from vectorgeo import data_utils
+from vectorgeo import transfer
 from vectorgeo import constants as c
 
 class TrainLandCoverTripletFlow(FlowSpec):
@@ -78,7 +78,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
         """
 
         # Get list of files in the S3 bucket
-        keys = data_utils.ls_s3('landcover/')
+        keys = transfer.ls_s3('landcover/')
         keys = list(filter(lambda x: x.endswith('.npy'), keys))
         print('Found {} files'.format(len(keys)))
 
@@ -89,7 +89,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
         arrays = []
         for key in keys:
             local_filepath = os.path.join(c.TMP_DIR, os.path.basename(key))
-            data_utils.download_file(key, local_filepath)
+            transfer.download_file(key, local_filepath)
             # Read each file in the list and append it to the arrays list
             print('....Reading {}'.format(key))
             arr = np.load(local_filepath)
@@ -144,7 +144,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
         # Save the model to S3
         model_path = os.path.join(c.TMP_DIR, self.model_filename)
         self.embedding_network.save(model_path) 
-        data_utils.upload_file(f"models/{self.model_filename}", model_path)
+        transfer.upload_file(f"models/{self.model_filename}", model_path)
         
         zs = self.embedding_network(self.test_batch).numpy()
 
