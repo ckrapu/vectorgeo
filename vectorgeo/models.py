@@ -1,4 +1,5 @@
 from tensorflow.keras import layers, Model, Sequential
+from tensorflow import keras
 import tensorflow as tf
 
 class ResnetCAE(Model):
@@ -76,7 +77,7 @@ def dense_res_block(units, **kwargs):
     model = Model(inputs=identity, outputs=x)
     return [model]
 
-
+@keras.saving.register_keras_serializable()
 class ResnetTripletEmbedding(Model):
     """
     Embedding network with resnet blocks for triplet loss.
