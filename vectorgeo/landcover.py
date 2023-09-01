@@ -1,5 +1,5 @@
 
-import constants as c
+from . import constants as c
 
 import h3
 import numpy as np
@@ -40,7 +40,7 @@ class LandCoverExtractor:
     Parent class for extracting landcover data from a raster;
     use the child classes in practice.
     """
-    def __init__(self, lc_path, gdf):
+    def __init__(self, lc_path, gdf=None, full_load=False):
         self.lc_path = lc_path
         self.gdf = gdf
 
@@ -53,7 +53,9 @@ class LandCoverExtractor:
 
         # Read raster metadata upon initialization
         self.bounds, self.affine, self.no_data_value = self._read_raster_metadata()
-        self.raster_array = self._load_raster_data()
+
+        if full_load:
+            self.raster_array = self._load_raster_data()
 
     def _read_raster_metadata(self):
         with rasterio.open(self.lc_path) as src:
@@ -156,10 +158,11 @@ class LandCoverProportions(LandCoverExtractor):
 
 class LandCoverPatches(LandCoverExtractor):
 
-    def __init__(self, lc_path, gdf, patch_size, sameness_threshold = 0.95):
-        super().__init__(lc_path, gdf)
+    def __init__(self, lc_path, gdf, patch_size, sameness_threshold = 0.95, full_load=False):
+        super().__init__(lc_path, gdf, full_load=full_load)
         self.patch_size = patch_size  # e.g., 64 for 64x64 patches
-        self.pixel_size = 100 # meters
+        self.pixel_size = 100         # meters
+        self.full_load = full_load    # Whether to load the entire raster into memory
 
         # If an image is too homogeneous, we don't want to use it
         self.sameness_threshold = sameness_threshold
@@ -173,9 +176,16 @@ class LandCoverPatches(LandCoverExtractor):
         row, col = rasterio.transform.rowcol(self.affine, lng, lat)
 
         half_size = self.patch_size // 2
-        patch = self.raster_array[row - half_size:row + half_size,
-                                  col - half_size:col + half_size]
-        
+
+        if self.full_load:
+            patch = self.raster_array[row - half_size:row + half_size,
+                                    col - half_size:col + half_size]
+        else:
+            # Read from disk 
+            with rasterio.open(self.lc_path) as src:
+                patch = src.read(1, window=((row - half_size, row + half_size),
+                                            (col - half_size, col + half_size)))
+            
         homogeneity = np.unique(patch, return_counts=True)[1].max() / patch.size
 
         if patch.shape == (self.patch_size, self.patch_size) and homogeneity < self.sameness_threshold:

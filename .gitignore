@@ -4,8 +4,16 @@ data/
 .metaflow/
 figures/
 vg-venv/
-__pycache__/
+lql-data/
+
+# Byte-compiled / optimized / DLL files
 *.pyc
 *.pyo
+__pycache__/
 
-
+# Produced data types
+*.npy
+*.tif
+*.keras
+*.json
+*.gpkg

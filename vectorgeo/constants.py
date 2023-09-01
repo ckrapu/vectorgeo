@@ -1,17 +1,16 @@
 import os
 
 # General project settings
-BASE_DIR     = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR     = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR     = os.path.join(BASE_DIR, 'data')
+TMP_DIR      = os.path.join(BASE_DIR, 'tmp')
 CONFIGS_DIR  = os.path.join(BASE_DIR, 'configs')
 SECRETS_PATH = os.path.join(BASE_DIR, '.secrets.yml')
 S3_BUCKET    = 'lql-data'
 S3_REGION    = 'us-east-1'
-LC_VPATH     = 'landcover'
 EMBED_VPATH  = 'embeddings' 
 
 QDRANT_COLLECTION_NAME = 'vectorgeo'
-
 
 # Landcover-specific settings
 LC_LEGEND = {
@@ -44,7 +43,7 @@ LC_MIN_LAT = -75.0
 COPERNICUS_LC_KEY = 'PROBAV_LC100_global_v3.0.1_2019-nrt_Discrete-Classification-map_EPSG-4326.tif'
 LC_H3_RES = 10
 LC_N_CLASSES = 23
-LC_LOCAL_PATH = os.path.join(DATA_DIR, COPERNICUS_LC_KEY)
+LC_LOCAL_PATH = os.path.join(TMP_DIR, COPERNICUS_LC_KEY)
 
 
 """

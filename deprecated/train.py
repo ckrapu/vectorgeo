@@ -148,7 +148,7 @@ def train(config_path=os.path.join(c.CONFIGS_DIR, 'resnet.json'), model_path=Non
     if model_path:
         try:
             base_filename = os.path.basename(model_path)
-            local_path    = os.path.join(c.BASE_DIR,"temp", base_filename)
+            local_path    = os.path.join(c.BASE_DIR,"tmp", base_filename)
             s3_boto.download_file(c.S3_BUCKET, model_path, local_path)
         except:
             print(f"Could not find model at {model_path} on s3. Trying to load from local disk...")

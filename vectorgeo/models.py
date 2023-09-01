@@ -1,7 +1,6 @@
 from tensorflow.keras import layers, Model, Sequential
 import tensorflow as tf
 
-
 class ResnetCAE(Model):
     """
     Convolutional autoencoder with resnet blocks.

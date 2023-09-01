@@ -57,6 +57,7 @@ torchaudio
 watchdog
 wheel
 xarray
+yq
 
 
 
