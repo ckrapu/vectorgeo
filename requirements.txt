@@ -50,6 +50,7 @@ multiprocess
 qdrant-client
 rtree
 snowflake-connector-python
+tensorflow
 toml
 torch
 torchvision
