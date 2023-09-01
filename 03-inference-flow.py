@@ -1,7 +1,6 @@
 import os
 import yaml
 import numpy as np
-import tensorflow.keras as keras
 import h3
 import geopandas as gpd
 
@@ -10,9 +9,11 @@ from tqdm import tqdm
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import Distance, VectorParams, PointStruct
 from shapely.geometry import Polygon
+from tensorflow import keras
 
-import constants as c
-import data_utils
+
+import vectorgeo.constants as c
+import vectorgeo.data_utils as data_utils
 
 from vectorgeo.h3_utils import h3_global_iterator
 from vectorgeo.landcover import LandCoverPatches
@@ -54,9 +55,9 @@ class InferenceLandCoverFlow(FlowSpec):
         'seed_latlngs',
         help='List of lat/lng pairs to use as seeds for inference. One job will be created for each seed',
         default = [
-            (47.475099, -122.170557),   # Seattle, WA
-            (48.5987, 37.9980),         # Bakhumt, Ukraine
-            (-19.632875, 23.466110),    # Okavango Delta, Botswana
+            #(47.475099, -122.170557),   # Seattle, WA
+            (48.5987, 37.9980),         # Bakhmut, Ukraine
+            #(-19.632875, 23.466110),    # Okavango Delta, Botswana
             ]
         )
 
@@ -99,7 +100,7 @@ class InferenceLandCoverFlow(FlowSpec):
         self.next(self.run_inference, foreach='seed_latlngs_parallel')
 
     @step
-    def run_inference(self, seed_latlng):
+    def run_inference(self):
         """
         Runs inference on land cover patches, uploading to Qdrant when they are finished.
         """
@@ -115,7 +116,7 @@ class InferenceLandCoverFlow(FlowSpec):
         int_map       = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
         int_map_fn    = np.vectorize(int_map.get)
 
-        seed_lat, seed_lng = seed_latlng
+        seed_lat, seed_lng = self.input
 
         iterator       = h3_global_iterator(seed_lat, seed_lng, self.h3_resolution)
         h3_batch       = []
@@ -125,7 +126,7 @@ class InferenceLandCoverFlow(FlowSpec):
         # Our main inference loop runs over points and when enough valid point/image pairs
         # have been found, we run them through the embedding network and then upload
         # the results to Qdrant.
-        print("Starting inference loop for job with seed coordinates", seed_latlng)
+        print("Starting inference loop for job with seed coordinates", seed_lat, seed_lng )
         for i, cell in enumerate(tqdm(iterator)):
             if i % 1000 == 0:
                 print(f"Processing cell {i}: {cell}")
@@ -187,3 +188,6 @@ class InferenceLandCoverFlow(FlowSpec):
         End the flow.
         """
         pass
+
+if __name__ == "__main__":
+    InferenceLandCoverFlow()
