@@ -10,18 +10,17 @@ from metaflow import (
 )
 
 import os
-import constants as c
 import numpy as np
 import matplotlib.pyplot as plt
 
 from matplotlib import gridspec
 from sklearn.decomposition import PCA
 from umap import UMAP
-from tqdm import tqdm
 
 from vectorgeo.models import initialize_triplet
 from vectorgeo.landcover import unpack_array
 from vectorgeo import data_utils
+from vectorgeo import constants as c
 
 class TrainLandCoverTripletFlow(FlowSpec):
     """
@@ -93,11 +92,15 @@ class TrainLandCoverTripletFlow(FlowSpec):
             data_utils.download_file(key, local_filepath)
             # Read each file in the list and append it to the arrays list
             print('....Reading {}'.format(key))
-            arrays.append(np.load(local_filepath))
+            arr = np.load(local_filepath)
+
+            print(f"Found {np.sum(np.isnan(arr))} NaNs in array")
+            arrays += [arr]
 
         # Convert from integer to one-hot encoding
         # We don't preprocess as one-hot because the storage is way larger.
-        xs_one_hot = np.concatenate([unpack_array(xs) for xs in tqdm(arrays)], axis=0)
+        print(f"Unpacking {len(arrays)} arrays...")
+        xs_one_hot = np.concatenate([unpack_array(xs) for xs in arrays], axis=0)
 
         self.input_shape = xs_one_hot.shape[2:]
         self.anchors, self.positives, self.negatives = xs_one_hot[:, 0], xs_one_hot[:, 1], xs_one_hot[:, 2]
