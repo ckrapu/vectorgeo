@@ -5,7 +5,7 @@ data/
 figures/
 vg-venv/
 lql-data/
-
+.secrets.yml
 # Byte-compiled / optimized / DLL files
 *.pyc
 *.pyo
