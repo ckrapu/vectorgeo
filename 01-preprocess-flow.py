@@ -50,6 +50,11 @@ class PreprocessLandCoverFlow(FlowSpec):
         help='Maximum istance between centroids of pairs of anchor/neighbor images in meters', 
         default=8000)
     
+    full_load = Parameter(
+        'full_load',
+        help='Whether or not to attempt to load the full Copernicus land cover .tif into memory',
+        default=False)
+    
     @step
     def start(self):
         """
@@ -78,7 +83,11 @@ class PreprocessLandCoverFlow(FlowSpec):
         transfer.download_file(lc_key, c.LC_LOCAL_PATH)
 
         print(f"Creating patch generator...")
-        data_generator = lc.LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.patch_size)
+        data_generator = lc.LandCoverPatches(
+            c.LC_LOCAL_PATH, 
+            self.world_gdf, 
+            self.patch_size, 
+            full_load=self.full_load)
 
         print(f"Generating {self.n_files} files with {self.samples_per_file} samples each...")
         for _ in range(self.n_files):

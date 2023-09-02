@@ -40,7 +40,7 @@ class LandCoverExtractor:
     Parent class for extracting landcover data from a raster;
     use the child classes in practice.
     """
-    def __init__(self, lc_path, gdf=None, full_load=False):
+    def __init__(self, lc_path, gdf=None, full_load=True):
         self.lc_path = lc_path
         self.gdf = gdf
 
@@ -158,7 +158,7 @@ class LandCoverProportions(LandCoverExtractor):
 
 class LandCoverPatches(LandCoverExtractor):
 
-    def __init__(self, lc_path, gdf, patch_size, sameness_threshold = 0.95, full_load=False):
+    def __init__(self, lc_path, gdf, patch_size, sameness_threshold = 0.95, full_load=True):
         super().__init__(lc_path, gdf, full_load=full_load)
         self.patch_size = patch_size  # e.g., 64 for 64x64 patches
         self.pixel_size = 100         # meters

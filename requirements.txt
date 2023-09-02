@@ -8,6 +8,7 @@ geojson
 geopandas
 h3
 hdbscan
+invoke
 ipykernel
 joblib
 jupyter
@@ -29,8 +30,10 @@ pydeck
 pylint
 pytest
 pyyaml
+qdrant-client
 rasterio
 rasterstats
+requests
 rtree
 s3fs
 scikit-image
@@ -44,14 +47,6 @@ tenacity
 tensorflow
 toml
 umap-learn
-geocoder
-more_itertools
-multiprocess
-qdrant-client
-rtree
-snowflake-connector-python
-tensorflow
-toml
 torch
 torchvision
 torchaudio
