@@ -4,6 +4,8 @@
   <title>Geo + Embeddings</title>
   <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyAacf5_dHXHI8AYrfjbOgpZrOIHMQ3zHz0&callback=Function.prototype"></script>
   <script src="https://unpkg.com/h3-js"></script>
+  <!-- Add Google Fonts -->
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&display=swap" rel="stylesheet">
   <style>
     /* Container styles */
     #map {
@@ -49,9 +51,78 @@
       0% { transform: rotate(0deg); }
       100% { transform: rotate(360deg); }
     }
+
+    /* Global Styles */
+    body, h1, h2, p, ul, li {
+      font-family: 'Roboto', sans-serif;
+    }
+
+    /* Splash Screen styles */
+    #splash-screen {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.5);  /* Darker background */
+      z-index: 2000;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+    }
+
+    #splash-content {
+      background: linear-gradient(135deg, rgba(0, 157, 255, 0.9), rgba(0, 217, 255, 0.9));  /* Gradient background */
+      padding: 30px;
+      border-radius: 20px;  /* More rounded edges */
+      box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);  /* Box shadow */
+      width: 40%;
+      height: auto;  /* Auto height */
+      text-align: left;
+      color: white;  /* White text */
+    }
+
+    h1, h2 {
+      margin-top: 0;
+    }
+
+    button {
+      background-color: white;
+      color: blue;
+      padding: 10px 20px;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+      transition: background-color 0.3s ease;
+    }
+
+    button:hover {
+      background-color: lightgray;
+    }
   </style>
 </head>
 <body>
+
+  <!-- Splash Screen -->
+  <div id="splash-screen">
+    <div id="splash-content">
+      <h1>Welcome to VectorGeo!</h1>
+      <p>This site uses a deep embedding model to build a vector space representation of the world.</p>
+      <h2>How to Use</h2>
+      <ul>
+        <li>Move the circle around to query different areas. The circle's center is the query point.</li>
+        <li>Shrink or expand the circle for a smaller or bigger search area. Only sites within the circle will be included in the search</li>
+        <li>Adjust the coverage fraction slider to tweak the sensitivity.</li>
+      </ul>
+      <div style="text-align: center;">
+        <img src="vg-user-animation-fast.gif" alt="User Guide Animation">
+      </div>
+      <div style="text-align: center;"> <!-- Center align container -->
+        <button onclick="closeSplash()" style="font-size: 24px;">Got it!</button>
+
+      </div>
+    </div>
+  </div>
 
   <div id="map"></div>
   <div id="slider-container">
@@ -180,12 +251,12 @@
       // Add new markers
       locations.forEach((location, index) => {
         const normalizedScore = (scores[index] - minScore) / (maxScore - minScore);
-        const color = `rgba(255, 255, 0, ${normalizedScore})`; // Red with varying opacity based on score
+        const color = `rgba(0, 0, 255, ${normalizedScore})`; // Red with varying opacity based on score
         let marker;
         if (render_mode === 'hexagon') {
           // Everything here uses lat-lng ordering, not lng-lat
           const h3_cell = h3.latLngToCell(location.lat, location.lon, h3_resolution);
-          
+
           // Disable geojson ordering
           const hexagon = h3.cellToBoundary(h3_cell, false);
           const hexagon_latlngs = hexagon.map(coord => {
@@ -247,6 +318,11 @@
     google.maps.event.addListenerOnce(map, 'idle', function() {
       fetchLocations(circle.getCenter().lat(), circle.getCenter().lng(), circle.getRadius());
     });
+
+    function closeSplash() {
+      document.getElementById('splash-screen').style.display = 'none';
+    }
+
 
   </script>
 </body>
