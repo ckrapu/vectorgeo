@@ -12,7 +12,6 @@ invoke
 ipykernel
 joblib
 jupyter
-keras
 line_profiler
 matplotlib
 memory_profiler
@@ -44,7 +43,6 @@ sqlalchemy
 tabula-py
 tabulate
 tenacity
-tensorflow
 toml
 umap-learn
 torch
@@ -55,5 +53,6 @@ wheel
 xarray
 yq
 
+protobuf==3.20.*
 
 

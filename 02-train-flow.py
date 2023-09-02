@@ -15,12 +15,15 @@ import matplotlib.pyplot as plt
 
 from matplotlib import gridspec
 from sklearn.decomposition import PCA
-from umap import UMAP
 
-from vectorgeo.models import initialize_triplet
+from vectorgeo.models import initialize_triplet, triplet_loss
 from vectorgeo.landcover import unpack_array
 from vectorgeo import transfer
 from vectorgeo import constants as c
+
+import torch
+from torch.utils.data import DataLoader, TensorDataset
+
 
 class TrainLandCoverTripletFlow(FlowSpec):
     """
@@ -33,12 +36,12 @@ class TrainLandCoverTripletFlow(FlowSpec):
     epochs = Parameter(
         'epochs',
         help='Number of epochs to train for',
-        default=10)
+        default=20)
     
     batch_size = Parameter(
         'batch_size',
         help='Batch size for training',
-        default=32)
+        default=64)
     
     embed_dim = Parameter(
         'embed_dim',
@@ -48,7 +51,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
     num_filters = Parameter(
         'num_filters',
         help='Number of filters in each convolutional layer',
-        default=32)
+        default=64)
     
     n_linear = Parameter(
         'n_linear',
@@ -68,7 +71,13 @@ class TrainLandCoverTripletFlow(FlowSpec):
     model_filename = Parameter(
         'model_filename',
         help='Filename to save the model to',
-        default= "resnet-triplet-lc.keras"
+        default= "resnet-triplet-lc.pt"
+    )
+    
+    device = Parameter(
+        'device',
+        help='Device to use for PyTorch operations',
+        default='cuda'
     )
 
     @step
@@ -103,24 +112,16 @@ class TrainLandCoverTripletFlow(FlowSpec):
         xs_one_hot = np.concatenate([unpack_array(xs) for xs in arrays], axis=0)
 
         self.input_shape = xs_one_hot.shape[2:]
-        self.anchors, self.positives, self.negatives = xs_one_hot[:, 0], xs_one_hot[:, 1], xs_one_hot[:, 2]
-        self.labels = np.zeros((len(self.anchors), 1))
+        anchors, positives, negatives = xs_one_hot[:, 0], xs_one_hot[:, 1], xs_one_hot[:, 2]
+        labels = np.zeros((len(anchors), 1))
         print(f"Loaded {len(arrays)} files; resulting stacked array has shape {xs_one_hot.shape}")
 
         # Save off a select group of images
         # to use for downstream information content
         # assessment with PCA
         self.test_batch = xs_one_hot[0:1024, 0]
-        self.next(self.train_embedding_model)
-
-    @step
-    def train_embedding_model(self):
-        """
-        Run the sampler in parallel across different jobs to iteratively samples of neighboring
-        land cover patches and store them as Numpy arrays on S3.
-        """
-
-        self.triplet_model, self.embedding_network = initialize_triplet(
+        print("Initializing triplet model...")
+        self.embedding_network, optimizer = initialize_triplet(
             self.input_shape,
             self.n_conv_blocks,
             self.embed_dim,
@@ -128,29 +129,56 @@ class TrainLandCoverTripletFlow(FlowSpec):
             self.n_linear
         )
 
-        self.history = self.triplet_model.fit(
-            [self.anchors, self.positives, self.negatives],
-            self.labels, epochs=self.epochs, batch_size=self.batch_size)
-        
+        self.embedding_network.to(self.device)  # Move model to GPU
+
+        # Convert Numpy arrays to PyTorch tensors and move them to GPU
+        anchors   = torch.tensor(anchors, dtype=torch.float32).to(self.device)
+        positives = torch.tensor(positives, dtype=torch.float32).to(self.device)
+        negatives = torch.tensor(negatives, dtype=torch.float32).to(self.device)
+        labels    = torch.tensor(labels, dtype=torch.float32).to(self.device)
+
+        # Create a DataLoader
+        dataset = TensorDataset(anchors, positives, negatives, labels)
+        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, drop_last=True)
+
+        # Training loop
+        self.history = {'loss': []}
+        print("Beginning training loop...")
+        for epoch in range(self.epochs):
+            print(f"Beginning epoch {epoch}...")
+            for batch_anchors, batch_positives, batch_negatives, _ in dataloader:
+                optimizer.zero_grad()
+                anchor_embedding = self.embedding_network(batch_anchors)
+                positive_embedding = self.embedding_network(batch_positives)
+                negative_embedding = self.embedding_network(batch_negatives)
+                merged_vector = torch.cat([anchor_embedding, positive_embedding, negative_embedding], dim=1)
+                loss = triplet_loss(merged_vector)
+                loss.backward()
+                optimizer.step()
+                self.history['loss'].append(loss.item())
+
         self.next(self.end)
-    
+        
     @step
     def end(self):
         """
         Generate statistics on the number of active dimensions after PCA & upload to S3.
-
         """
 
-        # Save the model to S3
+        # Save the model to a temporary directory
         model_path = os.path.join(c.TMP_DIR, self.model_filename)
-        self.embedding_network.save(model_path) 
+        torch.save(self.embedding_network, model_path)
+
+        # Upload the model to S3
         transfer.upload_file(f"models/{self.model_filename}", model_path)
-        
-        zs = self.embedding_network(self.test_batch).numpy()
 
-        # transform with pca
+        # Convert test_batch to PyTorch tensor and run through the model
+        test_batch_tensor = torch.tensor(self.test_batch, dtype=torch.float32).to(self.device)
+        with torch.no_grad():
+            zs = self.embedding_network(test_batch_tensor).cpu().numpy()
+
+        # Transform with PCA
         pca = PCA(n_components=self.embed_dim)
-
         zs_pca = pca.fit_transform(zs)
 
         # Print out the number of eigenvalues
@@ -181,13 +209,6 @@ class TrainLandCoverTripletFlow(FlowSpec):
         ax1.imshow(zs_pca[0:64])
         ax1.set_ylabel("Different vectors")
         ax1.set_xlabel("Vector dimensions (PCA)")
-
-        # Plot of UMAP projection of embeddings
-        reducer = UMAP()
-        ws = reducer.fit_transform(zs)
-        hb = ax2.hexbin(ws[:, 0], ws[:, 1], cmap='viridis', bins='log')
-        ax2.set_title("Hexbin log density for\nUMAP projection of embeddings")
-        plt.colorbar(hb, ax=ax2, orientation='vertical')
 
         # Adjust layout
         plt.tight_layout()

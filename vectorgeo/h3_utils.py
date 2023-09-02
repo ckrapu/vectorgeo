@@ -10,21 +10,22 @@ class H3GlobalIterator:
     def __init__(self, seed_lat, seed_lng, resolution, state_file='h3_state.json'):
         self.resolution = resolution
         self.state_file = state_file
-        try:
+        
+        self.seen = set()
+        self.queue = deque()
+        seed = h3.geo_to_h3(seed_lat, seed_lng, resolution)
+        self.queue.append(seed)
+        self.seen.add(seed)
+            
+        if state_file:
             with open(self.state_file, 'r') as f:
                 state = json.load(f)
                 self.seen = set(state['seen'])
                 self.queue = deque(state['queue'])
-        except FileNotFoundError:
-            print(f"State file {self.state_file} not found; starting from seed")
-            self.seen = set()
-            self.queue = deque()
-            seed = h3.geo_to_h3(seed_lat, seed_lng, resolution)
-            self.queue.append(seed)
-            self.seen.add(seed)
-    
-    def save_state(self):
-        with open(self.state_file, 'w') as f:
+
+
+    def save_state(self, state_filepath):
+        with open(state_filepath, 'w') as f:
             state = {'seen': list(self.seen), 'queue': list(self.queue)}
             json.dump(state, f)
     

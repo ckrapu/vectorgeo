@@ -31,8 +31,9 @@ def unpack_array(xs):
     for i in range(c.LC_N_CLASSES):
         xs_one_hot[:, i,] = (xs == i).squeeze().astype(int)
 
-    # Gets dimensions (N, 3, H, W, K)
-    xs_one_hot = np.swapaxes(xs_one_hot, 1, 4)
+    # Initial shape: (N, 3, H, W, K)
+    # Final shape: (N, 3, K, H, W)
+    xs_one_hot = np.transpose(xs_one_hot, (0, 4, 1, 2, 3))
     return xs_one_hot
 
 class LandCoverExtractor:

@@ -1,6 +1,10 @@
 #!/bin/bash
 
-apt-get install jq
+python3 -m venv vg-venv
+source vg-venv/bin/activate
+pip install -r requirements.txt
+
+sudo apt-get install jq
 
 # Read the YAML file (.secrets.yml) and get the values for aws_access_key_id and aws_secret_access_key
 AWS_ACCESS_KEY_ID=$(yq .aws_access_key_id secrets.yml)
@@ -34,12 +38,8 @@ echo "Environment variables AWS_ACCESS_KEY_ID and AWS_SECRET_ACCESS_KEY have bee
 
 mkdir tmp
 
+pip3 install pyOpenSSL --upgrade
 
-conda install -c conda-forge cudatoolkit=11.8.0
-python3 -m pip install nvidia-cudnn-cu11==8.6.0.163 tensorflow==2.13.*
-sudo mkdir -p $CONDA_PREFIX/etc/conda/activate.d
-sudo echo 'CUDNN_PATH=$(dirname $(python -c "import nvidia.cudnn;print(nvidia.cudnn.__file__)"))' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-sudo echo 'export LD_LIBRARY_PATH=$CUDNN_PATH/lib:$CONDA_PREFIX/lib/:$LD_LIBRARY_PATH' >> $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-source $CONDA_PREFIX/etc/conda/activate.d/env_vars.sh
-# Verify install:
-python3 -c "import tensorflow as tf; print(tf.config.list_physical_devices('GPU'))"
+# Just to make it easier to follow git workflow on fresh LL VMs
+git config --global user.email "ckrapu@gmail.com"
+git config --global user.name "Chris Krapu"
