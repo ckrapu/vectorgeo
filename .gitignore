@@ -1,10 +1,9 @@
-data/
+
 .DS_Store
 .ipynb_checkpoints
 .metaflow/
-figures/
 vg-venv/
-lql-data/
+
 .secrets.yml
 # Byte-compiled / optimized / DLL files
 *.pyc

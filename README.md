@@ -1,4 +1,10 @@
 # Overview
+`vectorgeo` performs the data engineering, model training, and inference routines for producing a globally-available geospatial vector embedding data product for use in machine learning for Earth & environment and geographic similarity search. Broadly, the architecture is composed of several parts:
+
+- Data cleaning, extraction, and feature engineering is conducted in Metaflow using Copernicus Land Cover data
+- Model training and inference is done using Keras in MetaFlow
+- Results are served from Qdrant cloud, making use of the `geo_filter` functionality unavailable in Pinecone, Weaviate, or other vector DB providers
+- A light web viewer (`vg_site/index.html`) interfaces with an AWS Lambda function to help visualize the results overlaid on a map.
 
 ## Installation
 Clone the repository, and run the following to make a new virtualenv in `vg-venv`:
