@@ -57,7 +57,7 @@
   <div id="slider-container">
     <label for="coverage">Coverage Fraction: </label>
     <input type="range" id="coverage" name="coverage" min="0.1" max="1" step="0.05" value="0.1">
-    <span id="coverage-value">0.1</span>
+    <span id="coverage-value">0.3</span>
   </div>
   <div id="spinner" class="spinner"></div>
 
@@ -141,7 +141,7 @@
 
     const debouncedFetchLocations = debounce(fetchLocations, 500);
 
-    async function fetchLocations(lat, lng, radius) {
+    async function fetchLocations(lat, lng, radius, render_mode='hexagon') {
       const h3_hex = h3.latLngToCell(lat, lng, h3_resolution);
       const AWS_LAMBDA_URL = "https://odme3rsnq2.execute-api.us-east-1.amazonaws.com/default";
       
@@ -162,6 +162,13 @@
       const locations = data.locations;
       const scores = data.scores;
 
+      // if scores or locations is zero length / empty, print a message
+      if (scores.length === 0 || locations.length === 0) {
+        console.log(`No locations found for lat: ${lat}, lng: ${lng}, radius: ${radius}`);
+        hideSpinner();
+        return;
+      }
+
       // Normalize scores
       const maxScore = Math.max(...scores);
       const minScore = Math.min(...scores);
@@ -174,22 +181,49 @@
       locations.forEach((location, index) => {
         const normalizedScore = (scores[index] - minScore) / (maxScore - minScore);
         const color = `rgba(255, 255, 0, ${normalizedScore})`; // Red with varying opacity based on score
-
-        const marker = new google.maps.Marker({
-          position: { lat: location.lat, lng: location.lon },
-          map: map,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
+        let marker;
+        if (render_mode === 'hexagon') {
+          // Everything here uses lat-lng ordering, not lng-lat
+          const h3_cell = h3.latLngToCell(location.lat, location.lon, h3_resolution);
+          
+          // Disable geojson ordering
+          const hexagon = h3.cellToBoundary(h3_cell, false);
+          const hexagon_latlngs = hexagon.map(coord => {
+            const latLng = new google.maps.LatLng(coord[0], coord[1]);
+            return new google.maps.LatLng(latLng.lat(), latLng.lng());
+          });
+          
+          marker = new google.maps.Polygon({
+            paths: hexagon_latlngs,
+            strokeColor: color,
+            strokeOpacity: 0.8,
+            strokeWeight: 2,
             fillColor: color,
-            fillOpacity: 0.6,
-            strokeWeight: 0,
-            scale: 5,
-            strokeColor: '#000000',  // Black color for the edge
-            strokeWeight: 2,  // Thickness of the edge
+            fillOpacity: 0.35,
+            map: map
+          });
+        }
+        else if (render_mode === 'circle') {
+          marker = new google.maps.Marker({
+            position: { lat: location.lat, lng: location.lon },
+            map: map,
+            icon: {
+              path: google.maps.SymbolPath.CIRCLE,
+              fillColor: color,
+              fillOpacity: 0.6,
+              strokeWeight: 0,
+              scale: 5,
+              strokeColor: '#000000',  // Black color for the edge
+              strokeWeight: 2,  // Thickness of the edge
+            }
+          });
+        }
+        else {
+          console.log('Invalid render mode, select one of "hexagons" or "circle"');
           }
-        });
         markers.push(marker);
-      });
+        }
+      );
       hideSpinner();
     }
 
