@@ -28,6 +28,8 @@ To debug issues with high latency / dropped requests to Qdrant, you can use the 
 python3 vectorgeo/health.py check_health
 ```
 
+Some basic Qdrant functionality is documented [here](https://qdrant.tech/documentation/quick-start/)
+
 ## Playbook
 
 ### Testing
