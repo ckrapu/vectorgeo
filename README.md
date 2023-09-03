@@ -21,6 +21,13 @@ Next, you must ensure that the appropriate AWS environment variables are set by 
 ## Files & data transfer
 Using this repository requires an S3 bucket (indicated in `constants.py`) to store files. Local copies are moved in and out of `tmp/` as required for each task. The module `vectorgeo/transfer.py` handles these exchanges with the correct bucket. **Note** the logic in `transfer.py` will avoid redownloading files if they can be found locally. To force a redownload, delete the relevant files manually from `tmp/`.
 
+## Check Qdrant health
+To debug issues with high latency / dropped requests to Qdrant, you can use the following command to check the health of the vector collection using both the Python API as well as a standard GET request:
+
+```
+python3 vectorgeo/health.py check_health
+```
+
 ## Playbook
 
 ### Testing
