@@ -23,7 +23,7 @@
       left: 50%;
       transform: translateX(-50%);
       z-index: 1000;
-      background-color: rgba(210, 180, 140, 0.7);  /* Added this */
+      background-color: rgba(0, 217, 255, 0.7);  /* Added this */
       padding: 10px;  /* Added this */
       border-radius: 12px;  /* Added this */
       border-color: black;  /* Added this */
@@ -37,8 +37,8 @@
       border: 5px solid rgba(0, 0, 0, 0.2);
       border-radius: 50%;
       border-top: 5px solid #000000;
-      width: 30px;
-      height: 30px;
+      width: 60px;
+      height: 60px;
       animation: spin 1s linear infinite;
       position: absolute;
       z-index: 1001;
@@ -127,8 +127,8 @@
   <div id="map"></div>
   <div id="slider-container">
     <label for="coverage">Coverage Fraction: </label>
-    <input type="range" id="coverage" name="coverage" min="0.1" max="1" step="0.05" value="0.1">
-    <span id="coverage-value">0.3</span>
+    <input type="range" id="coverage" name="coverage" min="0.1" max="1" step="0.05" value="0.2">
+    <span id="coverage-value">20%</span>
   </div>
   <div id="spinner" class="spinner"></div>
 
@@ -142,7 +142,8 @@
     // Update coverage fraction when the slider changes
     document.getElementById('coverage').addEventListener('input', function() {
       coverageFraction = parseFloat(this.value);
-      document.getElementById('coverage-value').textContent = coverageFraction;
+      // Convert to percentage and update the displayed value
+      document.getElementById('coverage-value').textContent = (coverageFraction * 100) + '%';
       updateCircleRadius();  // Update the markers based on the new coverage fraction
     });
 
@@ -183,13 +184,14 @@
       const center = { lat: 47.586301, lng: -122.377568 };
       map = new google.maps.Map(document.getElementById("map"), {
         center: center,
-        zoom: 10,
-        mapTypeId: 'terrain'
+        zoom: 9,
+        mapTypeId: 'terrain',
+        streetViewControl: false
       });
 
       circle = new google.maps.Circle({
         center: center,
-        radius: 10000,
+        radius: 40000,
         editable: true,
         draggable: true,
         map: map,
