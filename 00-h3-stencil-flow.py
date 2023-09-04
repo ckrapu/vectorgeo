@@ -2,12 +2,16 @@ import geopandas as gpd
 import rasterio as rio
 import h3
 import numpy as np
+import os
+import json
 
 from metaflow import FlowSpec, step, Parameter, parallel_map
 from rasterio import features
 from tqdm import tqdm
 
 from vectorgeo.h3_utils import generate_h3_indexes_at_resolution
+from vectorgeo.transfer import upload_file
+from vectorgeo import constants as c
 
 class H3StencilFlow(FlowSpec):
     """
@@ -99,6 +103,16 @@ class H3StencilFlow(FlowSpec):
 
         # print fraction of cells which are added to set
         print(f"Retained {len(self.h3s_processed) / len(self.h3s)} of cells")
+
+        filename = f"h3s-processed-{self.h3_resolution}.json"
+        filepath = os.path.join(c.TMP_DIR, filename)
+
+        # Save to JSON and upload to S3
+        with open(filepath) as f:
+            json.dump(list(self.h3s_processed), f)
+
+        upload_file(f'misc/{filename}', filepath)
+        
     
 if __name__ == '__main__':
     H3StencilFlow()
