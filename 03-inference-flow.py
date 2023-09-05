@@ -2,8 +2,10 @@ import os
 import yaml
 import numpy as np
 import h3
+import json
 import geopandas as gpd
 import torch
+import time
 
 from metaflow import FlowSpec, Parameter, step
 from tqdm import tqdm
@@ -27,7 +29,7 @@ class InferenceLandCoverFlow(FlowSpec):
     inference_batch_size = Parameter(
         'inference_batch_size',
         help='Batch size for inference',
-        default=32)
+        default=128)
     
     h3_resolution = Parameter(
         'h3_resolution',
@@ -95,6 +97,18 @@ class InferenceLandCoverFlow(FlowSpec):
             .iloc[0].geometry \
             .simplify(0.1)
         
+        # Test qdrant connection
+        qdrant_client = QdrantClient(
+                url=secrets['qdrant_url'], 
+                api_key=secrets['qdrant_api_key']
+            )
+        test_result = qdrant_client.search(
+            collection_name=f"{self.qdrant_collection}",
+            query_vector=[0]*self.embed_dim,
+            limit=3,
+        )    
+        print(f"Result from qdrant query test: {test_result}")
+        
         if self.wipe_qdrant:
             print(f"Wiping Qdrant collection {self.qdrant_collection}")
             qdrant_client = QdrantClient(
@@ -130,7 +144,7 @@ class InferenceLandCoverFlow(FlowSpec):
         
         lc_key = 'raw/' + c.COPERNICUS_LC_KEY
         transfer.download_file(lc_key, c.LC_LOCAL_PATH)
-        lcp = LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.image_size, full_load=False)
+        lcp = LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.image_size, full_load=True)
 
         int_map       = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
         int_map_fn    = np.vectorize(int_map.get)
@@ -147,9 +161,20 @@ class InferenceLandCoverFlow(FlowSpec):
         #    print(f"Encountered exception {e} while downloading state file")
         #    print("No state file found; starting from scratch")
             
+        
+        h3_filename = f"h3s-processed-{self.h3_resolution}.json"
+        h3_filepath = os.path.join(c.TMP_DIR, h3_filename)
+        h3_key = f'misc/{h3_filename}'
+        transfer.download_file(h3_key, h3_filepath)
+        
+        print(f"Loading set of valid H3s for inference from {h3_key}")
+        with open(h3_filepath, 'r') as src:
+            valid_h3s = set(json.loads(src.read()))
+            
         print("Setting up H3 execution queue at resolution", self.h3_resolution)
         iterator       = H3GlobalIterator(seed_lat, seed_lng, self.h3_resolution,
                                           state_file=None if self.reinit_queue else state_filepath)
+        
         h3_batch       = []
         xs_batch       = []
         h3s_processed  = set()
@@ -158,10 +183,13 @@ class InferenceLandCoverFlow(FlowSpec):
         # have been found, we run them through the embedding network and then upload
         # the results to Qdrant.
         print("Starting inference loop for job with seed coordinates", seed_lat, seed_lng)
+        start_time = time.time()
         for i, cell in enumerate(iterator):
             if i == 0:
                 print("Starting first iteration...")
-            if i % 5000 == 0:
+            if i % 1_000_000 == 0 and i > 0:
+                iter_rate = i / (time.time() - start_time)
+                print(f"Inference rate: {iter_rate} iterations per second")
                 print(f"Processing cell {i}: {cell}")
                 iterator.save_state(state_filepath)
                 transfer.upload_file(c.H3_STATE_KEY, state_filepath)        
@@ -169,14 +197,8 @@ class InferenceLandCoverFlow(FlowSpec):
             if self.max_iters and i >= int(self.max_iters):
                 print(f"Reached max_iters {self.max_iters}; stopping")
                 break
-
-            # Order of lat-lng vs lng-lat is reversed relative to what shapely expects
-            poly = Polygon((x,y) for y,x in h3.h3_to_geo_boundary(cell))
-
-            # This catches points that are in the middle of the ocean and lets
-            # us bypass running inference on them.
-            if not self.world_geom.intersects(poly):
-                h3s_processed.add(cell)
+                
+            if not cell in valid_h3s:
                 continue
 
             xs = int_map_fn(lcp.h3_to_patch(cell))
@@ -200,16 +222,21 @@ class InferenceLandCoverFlow(FlowSpec):
 
                 coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
                 lats, lngs = zip(*coords)    
-
-                _ = qdrant_client.upsert(
-                    collection_name=c.QDRANT_COLLECTION_NAME,
-                    wait=True,   
-                    points=[PointStruct(
-                        id=int("0x"+id, 0),
-                        vector=vector,
-                        payload={"location":{"lon": lng, "lat": lat}}
-                        ) for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
-                )
+                upload_points = [PointStruct(
+                            id=int("0x"+id, 0),
+                            vector=vector,
+                            payload={"location":{"lon": lng, "lat": lat}}
+                            ) for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
+                try:
+                    _ = qdrant_client.upsert(
+                        collection_name=c.QDRANT_COLLECTION_NAME,
+                        wait=True,   
+                        points=upload_points
+                    )
+                except Exception as e:
+                    print(f"Could not upload batch due to {e}; skipping batch")
+                    print("PointStructs:",upload_points)
+                    
                 h3s_processed = h3s_processed.union(set(h3_batch))
                 h3_batch = []
                 xs_batch = []

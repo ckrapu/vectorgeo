@@ -43,23 +43,20 @@ class H3StencilFlow(FlowSpec):
         # f values at the end
         self.h3s = generate_h3_indexes_at_resolution(self.h3_resolution)
         print(f"After generating all h3s, there are {len(self.h3s)} cells")
-
-        crs = 'EPSG:4326'
-
+        
         print("Reading world geometry")
         world_gdf = gpd.read_file('tmp/world.gpkg')
         world_gdf.geometry = world_gdf.buffer(0.05).simplify(0.1)
-        self.world_gdf = world_gdf.to_crs(crs)
+        
+        # File should already be in geographic CRS - 
+        # this is just to be sure.
+        self.world_gdf = world_gdf.to_crs('EPSG:4326')
 
         self.next(self.end)
 
 
     @step
     def end(self):
-        # Here, we simplify + buffer the geometry and then
-        # convert it into a binary raster mask
-        x_res = self.n_cells
-        y_res = self.n_cells
 
         # Create the raster
         print("Creating raster")
@@ -67,11 +64,11 @@ class H3StencilFlow(FlowSpec):
         # Bounds should run over all of earth
         bounds = (-180, -90, 180, 90)
 
-        transform = rio.transform.from_bounds(*bounds, x_res, y_res)
+        transform = rio.transform.from_bounds(*bounds, self.n_cells, self.n_cells)
 
         image = features.rasterize(
                     ((geom, 1) for geom in self.world_gdf.geometry),
-                    out_shape=(y_res, x_res),
+                    out_shape=(self.n_cells, self.n_cells),
                     transform=transform
         )
 
@@ -108,7 +105,7 @@ class H3StencilFlow(FlowSpec):
         filepath = os.path.join(c.TMP_DIR, filename)
 
         # Save to JSON and upload to S3
-        with open(filepath) as f:
+        with open(filepath, 'w') as f:
             json.dump(list(self.h3s_processed), f)
 
         upload_file(f'misc/{filename}', filepath)

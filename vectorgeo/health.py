@@ -28,7 +28,7 @@ def check_health_python_api(collection="vectorgeo"):
         api_key=secrets['qdrant_api_key']
     )
     health = qdrant_client.get_collection(collection)
-    print(f"Health of collection {collection}: {health}")
+    print(f"\n\nPYTHON API:\nHealth of collection {collection}: {health}")
 
 def check_health_manual_request(collection="vectorgeo"):
     """
@@ -41,7 +41,7 @@ def check_health_manual_request(collection="vectorgeo"):
     headers = {'api-key': secrets['qdrant_api_key']}
     
     response = requests.get(url, headers=headers)
-    print(f"Health of collection '{collection}': {response.json()}")
+    print(f"\n\nMANUAL REQUEST:\nHealth of collection '{collection}': {response.json()}")
 
 def main():
     fire.Fire({
