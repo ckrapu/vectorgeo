@@ -4,7 +4,7 @@
 .metaflow/
 vg-venv/
 
-.secrets.yml
+secrets.yml
 # Byte-compiled / optimized / DLL files
 *.pyc
 *.pyo

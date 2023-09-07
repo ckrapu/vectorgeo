@@ -6,7 +6,7 @@ pip install -r requirements.txt
 
 sudo apt-get install jq
 
-# Read the YAML file (.secrets.yml) and get the values for aws_access_key_id and aws_secret_access_key
+# Read the YAML file (secrets.yml) and get the values for aws_access_key_id and aws_secret_access_key
 AWS_ACCESS_KEY_ID=$(yq .aws_access_key_id secrets.yml)
 AWS_SECRET_ACCESS_KEY=$(yq .aws_secret_access_key secrets.yml)
 

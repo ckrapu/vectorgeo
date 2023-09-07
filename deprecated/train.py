@@ -33,7 +33,7 @@ import constants as c
 
 class Trainer:
     def __init__(self):
-        with open('.secrets.yml', 'r') as f:
+        with open('secrets.yml', 'r') as f:
             self.secrets = yaml.safe_load(f)
         self.s3_boto = boto3.client(
             's3', 
@@ -91,7 +91,7 @@ def train(config_path=os.path.join(c.CONFIGS_DIR, 'resnet.json'), model_path=Non
     Loads configuration file from disk and spins up a Keras model, 
     before training it and saving the model + metadata to S3.
     '''
-    with open('.secrets.yml', 'r') as f:
+    with open('secrets.yml', 'r') as f:
         secrets = yaml.safe_load(f)
 
     with open(config_path, 'r') as f:

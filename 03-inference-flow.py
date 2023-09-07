@@ -85,7 +85,7 @@ class InferenceLandCoverFlow(FlowSpec):
         Start the flow.
         """
 
-        secrets = yaml.load(open(os.path.join(c.BASE_DIR, '.secrets.yml')), Loader=yaml.FullLoader)
+        secrets = yaml.load(open(os.path.join(c.BASE_DIR, 'secrets.yml')), Loader=yaml.FullLoader)
 
         
         
@@ -127,7 +127,7 @@ class InferenceLandCoverFlow(FlowSpec):
         Runs inference on land cover patches, uploading to Qdrant when they are finished.
         """
 
-        secrets = yaml.load(open(os.path.join(c.BASE_DIR, '.secrets.yml')), Loader=yaml.FullLoader)
+        secrets = yaml.load(open(os.path.join(c.BASE_DIR, 'secrets.yml')), Loader=yaml.FullLoader)
         qdrant_client = QdrantClient(
             url=secrets['qdrant_url'], 
             api_key=secrets['qdrant_api_key']
