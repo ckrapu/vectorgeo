@@ -2,6 +2,7 @@
 
 python3 -m venv vg-venv
 source vg-venv/bin/activate
+pip install wheel
 pip install -r requirements.txt
 
 sudo apt-get install jq
