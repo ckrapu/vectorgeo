@@ -6,6 +6,7 @@ import json
 import geopandas as gpd
 import torch
 import time
+import pandas as pd
 
 from metaflow import FlowSpec, Parameter, step
 from tqdm import tqdm
@@ -18,6 +19,7 @@ import vectorgeo.transfer as transfer
 
 from vectorgeo.h3_utils import H3GlobalIterator
 from vectorgeo.landcover import LandCoverPatches
+
 
 class InferenceLandCoverFlow(FlowSpec):
 
@@ -81,8 +83,14 @@ class InferenceLandCoverFlow(FlowSpec):
     
     upload_qdrant = Parameter(
         'upload_qdrant',
-        help="Whether or not to upload vectors directly to Qdrant database',
+        help='Whether or not to upload vectors directly to Qdrant database',
         default=False
+    )
+
+    upload_s3 = Parameter(
+        'upload_s3',
+        help='Whether or not to upload vectors to S3',
+        default=True
     )
     
     @step
@@ -91,10 +99,11 @@ class InferenceLandCoverFlow(FlowSpec):
         Start the flow.
         """
 
+        # Make sure we either upload to S3 or Qdrant
+        assert self.upload_s3 or self.upload_qdrant, "Must upload to either S3 or Qdrant"
+
         secrets = yaml.load(open(os.path.join(c.BASE_DIR, 'secrets.yml')), Loader=yaml.FullLoader)
 
-        
-        
         # If desired, we use this geometry to mask out ocean or other areas far outside national boundaries.
         world_path = os.path.join(c.TMP_DIR, 'world.gpkg')
         transfer.download_file('misc/world.gpkg', world_path)
@@ -183,7 +192,11 @@ class InferenceLandCoverFlow(FlowSpec):
         
         h3_batch       = []
         xs_batch       = []
+        zs_batch       = []
         h3s_processed  = set()
+
+        if self.upload_s3:
+            rows = []
         
         # Our main inference loop runs over points and when enough valid point/image pairs
         # have been found, we run them through the embedding network and then upload
@@ -211,8 +224,8 @@ class InferenceLandCoverFlow(FlowSpec):
 
             xs_one_hot = np.zeros((c.LC_N_CLASSES, self.image_size, self.image_size))
 
-            for i in range(c.LC_N_CLASSES):
-                xs_one_hot[i] = (xs == i).squeeze().astype(int)
+            for j in range(c.LC_N_CLASSES):
+                xs_one_hot[j] = (xs == j).squeeze().astype(int)
 
             h3_batch.append(cell)
             xs_batch.append(xs_one_hot)
@@ -228,6 +241,7 @@ class InferenceLandCoverFlow(FlowSpec):
 
                 coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
                 lats, lngs = zip(*coords)
+
                 if self.upload_qdrant:
                     upload_points = [PointStruct(
                                 id=int("0x"+id, 0),
@@ -244,11 +258,24 @@ class InferenceLandCoverFlow(FlowSpec):
                         print(f"Could not upload batch due to {e}; skipping batch")
                         print("PointStructs:",upload_points)
                         
-                else:
-                    
+                if self.upload_s3:
+                    rows += [{"id":int("0x"+id, 0), "vector":vector, "lat":lat, "lng":lng} for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
+                
                 h3s_processed = h3s_processed.union(set(h3_batch))
                 h3_batch = []
                 xs_batch = []
+
+            if len(rows) >= 100_000:
+                print(f"Uploading {len(rows)} rows to S3")
+                
+                # Create parquet file from timestamp
+                file_id = int(time.time())
+                filename = f"vector-upload-{file_id}.parquet"
+                filepath = os.path.join(c.TMP_DIR, filename)
+                df = pd.DataFrame(rows)
+                df.to_parquet(filepath)
+                transfer.upload_file(f"vectors/{filename}", filepath)
+                rows = []
 
         self.next(self.end)
 
