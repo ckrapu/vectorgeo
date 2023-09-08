@@ -219,8 +219,11 @@ class InferenceLandCoverFlow(FlowSpec):
                 
             if not cell in valid_h3s:
                 continue
-
-            xs = int_map_fn(lcp.h3_to_patch(cell))
+            try:
+                xs = int_map_fn(lcp.h3_to_patch(cell))
+            except IndexError:
+                print(f"Found anomalous cell {cell}; skipping.")
+                continue
 
             xs_one_hot = np.zeros((c.LC_N_CLASSES, self.image_size, self.image_size))
 
@@ -265,7 +268,7 @@ class InferenceLandCoverFlow(FlowSpec):
                 h3_batch = []
                 xs_batch = []
 
-            if len(rows) >= 100_000:
+            if len(rows) >= 1_000_000:
                 print(f"Uploading {len(rows)} rows to S3")
                 
                 # Create parquet file from timestamp
