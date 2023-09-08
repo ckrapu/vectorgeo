@@ -7,16 +7,9 @@
 - A light web viewer (`vg_site/index.html`) interfaces with an AWS Lambda function to help visualize the results overlaid on a map.
 
 ## Installation
-Clone the repository, and run the following to make a new virtualenv in `vg-venv`:
+Clone the repository using `git clone https://ckrapu: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@github.com/ckrapu/vectorgeo.git
+`, and run`bash setup.sh`
 
-```
-python3 -m venv vg-venv
-source vg-venv/bin/activate
-pip install -r requirements.txt
-```
-
-Next, you must ensure that the appropriate AWS environment variables are set by running `bash setup.sh
-`.
 
 ## Files & data transfer
 Using this repository requires an S3 bucket (indicated in `constants.py`) to store files. Local copies are moved in and out of `tmp/` as required for each task. The module `vectorgeo/transfer.py` handles these exchanges with the correct bucket. **Note** the logic in `transfer.py` will avoid redownloading files if they can be found locally. To force a redownload, delete the relevant files manually from `tmp/`.
