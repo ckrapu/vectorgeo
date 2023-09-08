@@ -16,3 +16,4 @@ __pycache__/
 *.keras
 *.json
 *.gpkg
+*.parquet
