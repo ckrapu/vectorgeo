@@ -235,7 +235,7 @@ class InferenceLandCoverFlow(FlowSpec):
             # allowed as an id field.
             if len(h3_batch) >= self.inference_batch_size:
 
-                xs_one_hot_tensor = torch.tensor(np.stack(xs_batch,axis=0), dtype=torch.float32).to(self.device)
+                xs_one_hot_tensor = torch.Tensor(np.stack(xs_batch,axis=0), dtype=torch.float32).to(self.device)
                 with torch.no_grad():
                     zs_batch = self.model(xs_one_hot_tensor).cpu().numpy().squeeze().tolist()
 
