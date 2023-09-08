@@ -79,6 +79,12 @@ class InferenceLandCoverFlow(FlowSpec):
         default=True
     )
     
+    upload_qdrant = Parameter(
+        'upload_qdrant',
+        help="Whether or not to upload vectors directly to Qdrant database',
+        default=False
+    )
+    
     @step
     def start(self):
         """
@@ -221,21 +227,24 @@ class InferenceLandCoverFlow(FlowSpec):
                     zs_batch = self.model(xs_one_hot_tensor).cpu().numpy().squeeze().tolist()
 
                 coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
-                lats, lngs = zip(*coords)    
-                upload_points = [PointStruct(
-                            id=int("0x"+id, 0),
-                            vector=vector,
-                            payload={"location":{"lon": lng, "lat": lat}}
-                            ) for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
-                try:
-                    _ = qdrant_client.upsert(
-                        collection_name=c.QDRANT_COLLECTION_NAME,
-                        wait=True,   
-                        points=upload_points
-                    )
-                except Exception as e:
-                    print(f"Could not upload batch due to {e}; skipping batch")
-                    print("PointStructs:",upload_points)
+                lats, lngs = zip(*coords)
+                if self.upload_qdrant:
+                    upload_points = [PointStruct(
+                                id=int("0x"+id, 0),
+                                vector=vector,
+                                payload={"location":{"lon": lng, "lat": lat}}
+                                ) for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
+                    try:
+                        _ = qdrant_client.upsert(
+                            collection_name=c.QDRANT_COLLECTION_NAME,
+                            wait=True,   
+                            points=upload_points
+                        )
+                    except Exception as e:
+                        print(f"Could not upload batch due to {e}; skipping batch")
+                        print("PointStructs:",upload_points)
+                        
+                else:
                     
                 h3s_processed = h3s_processed.union(set(h3_batch))
                 h3_batch = []
