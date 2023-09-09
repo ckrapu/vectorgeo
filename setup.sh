@@ -4,6 +4,7 @@ python3 -m venv vg-venv
 source vg-venv/bin/activate
 pip install wheel
 pip install -r requirements.txt
+python -m ipykernel install --user --name vg-venv --display-name "vectorgeo"
 
 sudo apt-get install jq
 
