@@ -222,10 +222,10 @@ class InferenceLandCoverFlow(FlowSpec):
             try:
                 xs = int_map_fn(lcp.h3_to_patch(cell))
 
-            # When there are None elements in the patch, we get an error
+            # When there are None elements in the patch, we get a TypeError
             # and this is the least disruptive way to handle it.
-            except TypeError:
-                print(f"Found anomalous cell {cell}; skipping.")
+            except Exception as e:
+                print(f"Found anomalous cell {cell} with error {e}. This cell will be skipped.")
                 continue
 
             xs_one_hot = np.zeros((c.LC_N_CLASSES, self.image_size, self.image_size))
