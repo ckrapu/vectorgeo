@@ -43,6 +43,7 @@ while True:
     objects['Contents'] = [
         obj for obj in objects['Contents']
         if obj['Key'] not in checked_keys
+        and '.parquet' in obj['Key']
     ]
     print(f"Found {len(objects['Contents'])} files to run")
 
