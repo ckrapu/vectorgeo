@@ -49,7 +49,8 @@ while True:
 
     for obj in objects['Contents']:
         print(f"...Downloading {obj['Key']} from S3")
-        local_path = os.path.join(c.TMP_DIR, obj['Key'])
+        basename = os.path.basename(obj['Key'])
+        local_path = os.path.join(c.TMP_DIR, basename)
         download_file(obj['Key'], local_path)
         
         # Load the data into a Pandas DataFrame
