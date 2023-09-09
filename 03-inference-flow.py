@@ -208,7 +208,7 @@ class InferenceLandCoverFlow(FlowSpec):
                 print("Starting first iteration...")
             if i % 1_000_000 == 0 and i > 0:
                 iter_rate = i / (time.time() - start_time)
-                print(f"Inference rate: {iter_rate} iterations per second")
+                print(f"Inference rate: {iter_rate:.1f} iterations per second")
                 print(f"Processing cell {i}: {cell}")
                 iterator.save_state(state_filepath)
                 transfer.upload_file(c.H3_STATE_KEY, state_filepath)        
@@ -221,7 +221,10 @@ class InferenceLandCoverFlow(FlowSpec):
                 continue
             try:
                 xs = int_map_fn(lcp.h3_to_patch(cell))
-            except IndexError:
+
+            # When there are None elements in the patch, we get an error
+            # and this is the least disruptive way to handle it.
+            except TypeError:
                 print(f"Found anomalous cell {cell}; skipping.")
                 continue
 
