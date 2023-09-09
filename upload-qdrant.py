@@ -58,31 +58,32 @@ while True:
         
         # Extract vectors and other necessary information
         print(f"...Uploading {obj['Key']} to Qdrant")
-        points = [
-            PointStruct(
-                id=row['id'],
-                vector=row['vector'],
-                payload={"location": {"lon": row['lng'], "lat": row['lat']}}
-            )
-            for _, row in df.iterrows()
-        ]
-        
-        # Batch the vectors and upload them to Qdrant
-        # If we get a timeout error, back off up to T times with a delay that quadruples each time
-        uploaded = False
-        delay = 4
-        while not uploaded:
-            try:
-                qdrant_client.upsert(
-                    collection_name=c.QDRANT_COLLECTION_NAME,
-                    wait=True,
-                    points=points
+        for df_piece in pd.np.array_split(df, 20):
+            points = [
+                PointStruct(
+                    id=row['id'],
+                    vector=row['vector'],
+                    payload={"location": {"lon": row['lng'], "lat": row['lat']}}
                 )
-                uploaded = True
-            except Exception as e:
-                print(f"Failed to upload batch with exception {e}")
-                time.sleep(delay)
-                delay = delay * 4
+                for _, row in df_piece.iterrows()
+            ]
+            
+            # Batch the vectors and upload them to Qdrant
+            # If we get a timeout error, back off up to T times with a delay that quadruples each time
+            uploaded = False
+            delay = 4
+            while not uploaded:
+                try:
+                    qdrant_client.upsert(
+                        collection_name=c.QDRANT_COLLECTION_NAME,
+                        wait=True,
+                        points=points
+                    )
+                    uploaded = True
+                except Exception as e:
+                    print(f"Failed to upload batch with exception {e}")
+                    time.sleep(delay)
+                    delay = delay * 4
 
         # Add the file to the set of files that have already been run
         checked_keys.add(obj['Key'])
