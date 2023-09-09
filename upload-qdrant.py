@@ -1,5 +1,6 @@
 import os
 import boto3
+import numpy as np
 import pandas as pd
 import yaml
 import time
@@ -58,7 +59,7 @@ while True:
         
         # Extract vectors and other necessary information
         print(f"...Uploading {obj['Key']} to Qdrant")
-        for df_piece in pd.np.array_split(df, 20):
+        for df_piece in np.array_split(df, 20):
             points = [
                 PointStruct(
                     id=row['id'],
