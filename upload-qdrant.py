@@ -66,11 +66,21 @@ while True:
         ]
         
         # Batch the vectors and upload them to Qdrant
-        qdrant_client.upsert(
-            collection_name=c.QDRANT_COLLECTION_NAME,
-            wait=True,
-            points=points
-        )
+        # If we get a timeout error, back off up to T times with a delay that quadruples each time
+        uploaded = False
+        delay = 4
+        while not uploaded:
+            try:
+                qdrant_client.upsert(
+                    collection_name=c.QDRANT_COLLECTION_NAME,
+                    wait=True,
+                    points=points
+                )
+                uploaded = True
+            except Exception as e:
+                print(f"Failed to upload batch with exception {e}")
+                time.sleep(delay)
+                delay = delay * 4
 
         # Add the file to the set of files that have already been run
         checked_keys.add(obj['Key'])
