@@ -36,7 +36,7 @@ LC_LEGEND = {
     124: 'Open forest, deciduous broad leaf',
     125: 'Open forest, mixed',
     126: 'Open forest, not matching any of the other definitions',
-    200: 'Oceans, seas'
+    200: 'Oceans, seas',
 }
 LC_MAX_LAT = 75.0
 LC_MIN_LAT = -75.0
