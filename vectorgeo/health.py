@@ -3,6 +3,7 @@ import os
 import requests
 import yaml
 import constants as c
+import json
 
 from qdrant_client import QdrantClient
 
@@ -41,7 +42,9 @@ def check_health_manual_request(collection="vectorgeo"):
     headers = {'api-key': secrets['qdrant_api_key']}
     
     response = requests.get(url, headers=headers)
-    print(f"\n\nMANUAL REQUEST:\nHealth of collection '{collection}': {response.json()}")
+    json_formatted_str = json.dumps(response.json(), indent=2)
+
+    print(f"\n\nMANUAL REQUEST:\nHealth of collection '{collection}': {json_formatted_str}")
 
 def main():
     fire.Fire({
