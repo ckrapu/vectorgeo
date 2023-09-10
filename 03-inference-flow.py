@@ -132,8 +132,12 @@ class InferenceLandCoverFlow(FlowSpec):
             )
             qdrant_client.recreate_collection(
                 collection_name=self.qdrant_collection,
-                vectors_config=VectorParams(size=self.embed_dim, distance=Distance.DOT),
+                vectors_config=VectorParams(size=self.embed_dim, distance=Distance.COSINE),
             )
+            qdrant_client.create_payload_index(collection_name=c.QDRANT_COLLECTION_NAME, 
+                            field_name="location", 
+                            field_schema="geo")
+            
         self.next(self.run_inference)
 
     @step
