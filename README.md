@@ -25,6 +25,9 @@ Some basic Qdrant functionality is documented [here](https://qdrant.tech/documen
 
 ## Playbook
 
+#### Setting up the Aurora Postgres table
+To recreate the table for serving vector embeddings from AWS Aurora PostgreSQL, run the script `python setup-aurora.py`. NOTE: this command will drop any existing table and will force you to start from scratch.
+
 ### Testing
 To test the end-to-end workflow for land cover extraction and embedding, run the following commands:
 ```
