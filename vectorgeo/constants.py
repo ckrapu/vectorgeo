@@ -9,7 +9,7 @@ SECRETS_PATH = os.path.join(BASE_DIR, 'secrets.yml')
 S3_BUCKET    = 'lql-data'
 S3_REGION    = 'us-east-1'
 EMBED_VPATH  = 'embeddings' 
-
+EMBED_DIM    = 16
 QDRANT_COLLECTION_NAME = 'vectorgeo'
 
 # Landcover-specific settings
