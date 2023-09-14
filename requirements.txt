@@ -29,7 +29,6 @@ pydeck
 pylint
 pytest
 pyyaml
-qdrant-client
 rasterio
 rasterstats
 requests
