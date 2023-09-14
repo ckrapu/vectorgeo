@@ -21,18 +21,21 @@ Using this repository requires an S3 bucket (indicated in `constants.py`) to sto
 The design of this project is a basic linear progression for (1) forming a training dataset, (2) training a model, (3) applying inference to the entire world, and (4) inserting the records into a vector database for similarity search on the front end. The following diagram shows the flow of data through the system:
 ```mermaid
 graph TD;
-    A[Retrieve Global Land Cover Raster] -->|Move to| S3
-    S3 -->|Start Preprocess Flow| B[Cut Pieces of Raster]
-    B -->|Store as npy files| S3
-    S3 -->|Start Training Flow| C[Train Keras Model]
-    C -->|Store Trained Model| S3
-    S3 -->|Start Inference Flow| D[Iterate Over All Patches in Raster]
-    D -->|Upload Results| S3
-    S3 -->|Start Upload Job| E[Insert Results into Aurora PostgreSQL]
-    E -->|Data Available for| F[AWS Lambda Function]
-    F -->|Vector Similarity Search| G[vg-site Front End]
+    extRaster[External Raster Source] -->|00-h3-stencil-flow.py| S3[S3]
+    S3 -->|01-preprocess-flow.py| preprocess[Preprocess Flow]
+    preprocess -->|Store as npy files| S3
+    S3 -->|02-train-flow.py| trainFlow[Train Flow]
+    trainFlow -->|Store Trained Model| S3
+    S3 -->|03-inference-flow.py| inferenceFlow[Inference Flow]
+    inferenceFlow -->|Upload Results| S3
+    S3 -->|upload-aurora.py| postgres[Aurora PostgreSQL]
+    postgres -->|Data Available for| lambda[AWS Lambda Function]
+    lambda -->|Vector Similarity Search| vgSite[vg-site Front End]
     
     style S3 fill:#f9d,stroke:#333,stroke-width:2px;
+    style extRaster fill:#fff,stroke:#333,stroke-width:2px,shape:square;
+    style postgres fill:#fff,stroke:#333,stroke-width:2px,shape:square;
+
 
 ```
 
