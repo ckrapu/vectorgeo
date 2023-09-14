@@ -20,7 +20,7 @@ class AuroraUploadFlow(FlowSpec):
     wipe_existing = Parameter(
         "wipe_existing",
         help="Whether to wipe the existing table before uploading",
-        default=True,
+        default=False,
     )
 
     max_rows_upload = Parameter(
@@ -39,6 +39,8 @@ class AuroraUploadFlow(FlowSpec):
         Wipes the existing Aurora database and creates a new table for the vector data.
         """
 
+        
+
         # Load secrets from the secrets.yml file
         with open("secrets.yml", "r") as file:
             secrets = yaml.safe_load(file)
@@ -56,8 +58,9 @@ class AuroraUploadFlow(FlowSpec):
         cur = conn.cursor()
 
         # Drop the table if it already exists
-        print("Dropping table...")
-        cur.execute("DROP TABLE IF EXISTS vectorgeo;")
+        if self.wipe_existing:
+            print("Dropping table...")
+            cur.execute("DROP TABLE IF EXISTS vectorgeo;")
 
         # Activate the PostGIS extension
         print("Activating extensions...")
@@ -68,7 +71,7 @@ class AuroraUploadFlow(FlowSpec):
         print("Creating table...")
         cur.execute(
             f"""
-            CREATE TABLE vectorgeo (
+            CREATE TABLE IF NOT EXISTS vectorgeo (
                 id BIGSERIAL PRIMARY KEY,
                 geom GEOMETRY(Point, 3857),
                 embedding vector({c.EMBED_DIM})
@@ -83,6 +86,7 @@ class AuroraUploadFlow(FlowSpec):
         conn.commit()
 
         print("\nIMPORTANT: Don't forget to rebuild the ivfflat index after upload!\n")
+
         self.next(self.upload)
 
     @step
@@ -155,7 +159,7 @@ class AuroraUploadFlow(FlowSpec):
             # Extract vectors and other necessary information
             print(f"...Uploading {key} to Aurora")
             for df_piece in np.array_split(df, 10):
-                df_piece["x"], df_piece["y"] = transformer.transform(
+                df_piece["x"], df_piece["y"] = transformer.transform(  # pylint: disable=unpacking-non-sequence
                     df_piece["lng"], df_piece["lat"]
                 )
 
