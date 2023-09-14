@@ -44,8 +44,6 @@ for row in cur.fetchall():
 bucket_name = c.S3_BUCKET
 prefix = 'vectors/'
 
-# Create set of files already run
-checked_keys = set()
 n_rows_uploaded = 0
 
 # List all Parquet files in the S3 bucket with the specified prefix
@@ -55,8 +53,7 @@ print(f"Found {len(contents)} files in S3")
 # Filter out the files that have already been run
 keys = [
     obj['Key'] for obj in contents
-    if obj['Key'] not in checked_keys
-    and obj['Key'].endswith('.parquet')
+    if obj['Key'].endswith('.parquet')
 ]
 print(f"Found {len(keys)} files to run")
 
@@ -88,6 +85,7 @@ for key in keys:
         n_rows_uploaded += len(values)
 
         if n_rows_uploaded >= MAX_ROWS_UPLOAD:
+            print(f"Reached maximum number of rows to upload ({MAX_ROWS_UPLOAD}); stopping")
             finished = True
             break
 

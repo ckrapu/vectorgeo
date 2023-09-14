@@ -4,6 +4,8 @@
 .metaflow/
 vg-venv/
 
+scratchpad.ipynb
+
 secrets.yml
 # Byte-compiled / optimized / DLL files
 *.pyc

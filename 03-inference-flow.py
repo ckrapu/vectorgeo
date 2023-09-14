@@ -9,10 +9,6 @@ import time
 import pandas as pd
 
 from metaflow import FlowSpec, Parameter, step
-from tqdm import tqdm
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import Distance, VectorParams, PointStruct
-from shapely.geometry import Polygon
 
 import vectorgeo.constants as c
 import vectorgeo.transfer as transfer
@@ -20,13 +16,11 @@ import vectorgeo.transfer as transfer
 from vectorgeo.h3_utils import H3GlobalIterator
 from vectorgeo.landcover import LandCoverPatches
 
-
 class InferenceLandCoverFlow(FlowSpec):
-
-    wipe_qdrant = Parameter(
-        'wipe_qdrant',
-        help='Whether to wipe the Qdrant collection before starting inference',
-        default=False)
+    """
+    Flow for taking a pretrained model for land cover embedding and running inference
+    on the same data, uploading the results to S3.
+    """
     
     inference_batch_size = Parameter(
         'inference_batch_size',
@@ -59,16 +53,12 @@ class InferenceLandCoverFlow(FlowSpec):
         default = (47.475099, -122.170557))   # Seattle, WA
             #(48.5987, 37.9980),             # Bakhmut, Ukraine
             #(-19.632875, 23.466110),        # Okavango Delta, Botswana
+
     max_iters = Parameter(
         'max_iters',
         help='Maximum number of iterations to run',
         default=None)
 
-    qdrant_collection = Parameter(
-        'qdrant_collection',
-        help='Name of the Qdrant collection to use',
-        default=c.QDRANT_COLLECTION_NAME)
-    
     device = Parameter(
         'device',
         help='Device to use for PyTorch operations',
@@ -81,28 +71,11 @@ class InferenceLandCoverFlow(FlowSpec):
         default=True
     )
     
-    upload_qdrant = Parameter(
-        'upload_qdrant',
-        help='Whether or not to upload vectors directly to Qdrant database',
-        default=False
-    )
-
-    upload_s3 = Parameter(
-        'upload_s3',
-        help='Whether or not to upload vectors to S3',
-        default=True
-    )
-    
     @step
     def start(self):
         """
         Start the flow.
         """
-
-        # Make sure we either upload to S3 or Qdrant
-        assert self.upload_s3 or self.upload_qdrant, "Must upload to either S3 or Qdrant"
-
-        secrets = yaml.load(open(os.path.join(c.BASE_DIR, 'secrets.yml')), Loader=yaml.FullLoader)
 
         # If desired, we use this geometry to mask out ocean or other areas far outside national boundaries.
         world_path = os.path.join(c.TMP_DIR, 'world.gpkg')
@@ -112,46 +85,15 @@ class InferenceLandCoverFlow(FlowSpec):
             .iloc[0].geometry \
             .simplify(0.1)
         
-        # Test qdrant connection
-        qdrant_client = QdrantClient(
-                url=secrets['qdrant_url'], 
-                api_key=secrets['qdrant_api_key']
-            )
-        test_result = qdrant_client.search(
-            collection_name=f"{self.qdrant_collection}",
-            query_vector=[0]*self.embed_dim,
-            limit=3,
-        )    
-        print(f"Result from qdrant query test: {test_result}")
-        
-        if self.wipe_qdrant:
-            print(f"Wiping Qdrant collection {self.qdrant_collection}")
-            qdrant_client = QdrantClient(
-                url=secrets['qdrant_url'], 
-                api_key=secrets['qdrant_api_key']
-            )
-            qdrant_client.recreate_collection(
-                collection_name=self.qdrant_collection,
-                vectors_config=VectorParams(size=self.embed_dim, distance=Distance.COSINE),
-            )
-            qdrant_client.create_payload_index(collection_name=c.QDRANT_COLLECTION_NAME, 
-                            field_name="location", 
-                            field_schema="geo")
-            
+       
         self.next(self.run_inference)
 
     @step
     def run_inference(self):
         """
-        Runs inference on land cover patches, uploading to Qdrant when they are finished.
+        Runs inference on land cover patches, uploading to S3 when they are finished.
         """
-
-        secrets = yaml.load(open(os.path.join(c.BASE_DIR, 'secrets.yml')), Loader=yaml.FullLoader)
-        qdrant_client = QdrantClient(
-            url=secrets['qdrant_url'], 
-            api_key=secrets['qdrant_api_key']
-        )
-        
+                
         key = f"models/{self.model_filename}"
         local_model_path = os.path.join(c.TMP_DIR, self.model_filename)
         transfer.download_file(key, local_model_path)
@@ -172,15 +114,11 @@ class InferenceLandCoverFlow(FlowSpec):
 
 
         state_filepath = os.path.join(c.TMP_DIR, c.H3_STATE_FILENAME)
-        #try:
+
         if not self.reinit_queue:
             print("Attempting to use existing H3 queue file...")
             transfer.download_file(c.H3_STATE_KEY,state_filepath)
-        #except Exception as e:
-        #    print(f"Encountered exception {e} while downloading state file")
-        #    print("No state file found; starting from scratch")
-            
-        
+
         h3_filename = f"h3s-processed-{self.h3_resolution}.json"
         h3_filepath = os.path.join(c.TMP_DIR, h3_filename)
         h3_key = f'misc/{h3_filename}'
@@ -199,12 +137,11 @@ class InferenceLandCoverFlow(FlowSpec):
         zs_batch       = []
         h3s_processed  = set()
 
-        if self.upload_s3:
-            rows = []
+        rows = []
         
         # Our main inference loop runs over points and when enough valid point/image pairs
         # have been found, we run them through the embedding network and then upload
-        # the results to Qdrant.
+        # the results to S3.
         print("Starting inference loop for job with seed coordinates", seed_lat, seed_lng)
         start_time = time.time()
         for i, cell in enumerate(iterator):
@@ -240,8 +177,7 @@ class InferenceLandCoverFlow(FlowSpec):
             h3_batch.append(cell)
             xs_batch.append(xs_one_hot)
 
-            # Qdrant won't allow arbitrary string id fields, so 
-            # we convert the H3 index to an integer which is 
+            # We convert the H3 index to an integer which is 
             # allowed as an id field.
             if len(h3_batch) >= self.inference_batch_size:
 
@@ -251,25 +187,8 @@ class InferenceLandCoverFlow(FlowSpec):
 
                 coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
                 lats, lngs = zip(*coords)
-
-                if self.upload_qdrant:
-                    upload_points = [PointStruct(
-                                id=int("0x"+id, 0),
-                                vector=vector,
-                                payload={"location":{"lon": lng, "lat": lat}}
-                                ) for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
-                    try:
-                        _ = qdrant_client.upsert(
-                            collection_name=c.QDRANT_COLLECTION_NAME,
-                            wait=True,   
-                            points=upload_points
-                        )
-                    except Exception as e:
-                        print(f"Could not upload batch due to {e}; skipping batch")
-                        print("PointStructs:",upload_points)
                         
-                if self.upload_s3:
-                    rows += [{"id":int("0x"+id, 0), "vector":vector, "lat":lat, "lng":lng} for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
+                rows += [{"id":int("0x"+id, 0), "vector":vector, "lat":lat, "lng":lng} for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
                 
                 h3s_processed = h3s_processed.union(set(h3_batch))
                 h3_batch = []
