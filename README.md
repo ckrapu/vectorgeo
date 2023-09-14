@@ -10,7 +10,13 @@
 The accompanying repository `vg-site` implements a light web viewer interfacing with the PostgreSQL database via an AWS Lambda function to help visualize the results overlaid on a map.
 
 ## Installation
-Clone the repository using `git clone https://ckrapu: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@github.com/ckrapu/vectorgeo.git` and run `bash setup.sh`.
+Clone the repository using these commands:
+
+```
+token=$(python -c "import yaml; print(yaml.safe_load(open('secrets.yml'))['git_token'])")
+git clone https://$token@github.com/ckrapu/vectorgeo.git
+```
+
 This repository was designed to run its most intensive pieces on a Lambda Labs A10 instance with 192GB of RAM and 30 cores. Individual parts of this workflow such as the preprocess and upload may work on smaller machines.
 
 
@@ -35,8 +41,6 @@ graph TD;
     style S3 fill:#f9d,stroke:#333,stroke-width:2px;
     style extRaster fill:#fff,stroke:#333,stroke-width:2px,shape:square;
     style postgres fill:#fff,stroke:#333,stroke-width:2px,shape:square;
-
-
 ```
 
 ## Playbook
