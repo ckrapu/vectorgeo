@@ -5,8 +5,9 @@
 
 - Data cleaning, extraction, and feature engineering is conducted in Metaflow using Copernicus Land Cover data
 - Model training and inference is done using Keras in MetaFlow
-- Results are served from Qdrant cloud, making use of the `geo_filter` functionality unavailable in Pinecone, Weaviate, or other vector DB providers
-- A light web viewer (`vg_site/index.html`) interfaces with an AWS Lambda function to help visualize the results overlaid on a map.
+- Results are served from Aurora PostgreSQL, making use of the `pgvector` and PostGIS functionality unavailable in Pinecone, Weaviate, or other vector DB providers
+
+The accompanying repository `vg-site` implements a light web viewer interfacing with the PostgreSQL database via an AWS Lambda function to help visualize the results overlaid on a map.
 
 ## Installation
 Clone the repository using `git clone https://ckrapu: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@github.com/ckrapu/vectorgeo.git` and run `bash setup.sh`.
