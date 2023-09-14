@@ -45,8 +45,8 @@ To test the end-to-end workflow for land cover extraction and embedding, run the
 ```
 python3 00-h3-stencil-flow.py --no-pylint run --h3_resolution=3
 python3 01-preprocess-flow.py --no-pylint run --n_files=2 --n_jobs=3 --samples_per_file=4
-python3 02-train-flow.py --no-pylint run --epochs=1 --n_train_files=2 --model_filename=test.keras
-python3 03-inference-flow.py --no-pylint run --max_iters=10 --model_filename=test.keras
+python3 02-train-flow.py      --no-pylint run --epochs=1 --n_train_files=2 --model_filename=test.keras
+python3 03-inference-flow.py  --no-pylint run --max_iters=10 --model_filename=test.keras
 ```
 
 ### Production workflow
