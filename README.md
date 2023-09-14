@@ -19,16 +19,19 @@ Using this repository requires an S3 bucket (indicated in `constants.py`) to sto
 ### Architecture
 ```mermaid
 graph TD;
-    A[Retrieve Global Land Cover Raster] -->|Move to| B[S3]
-    B -->|Start Preprocess Flow| C[Cut Pieces of Raster]
-    C -->|Store as npy files| D[S3]
-    D -->|Start Training Flow| E[Train Keras Model]
-    E -->|Store Trained Model| F[S3]
-    F -->|Start Inference Flow| G[Iterate Over All Patches in Raster]
-    G -->|Upload Results| H[S3]
-    H -->|Start Upload Job| I[Insert Results into Aurora PostgreSQL]
-    I -->|Data Available for| J[AWS Lambda Function]
-    J -->|Vector Similarity Search| K[vg-site Front End]
+    A[Retrieve Global Land Cover Raster] -->|Move to| S3
+    S3 -->|Start Preprocess Flow| B[Cut Pieces of Raster]
+    B -->|Store as npy files| S3
+    S3 -->|Start Training Flow| C[Train Keras Model]
+    C -->|Store Trained Model| S3
+    S3 -->|Start Inference Flow| D[Iterate Over All Patches in Raster]
+    D -->|Upload Results| S3
+    S3 -->|Start Upload Job| E[Insert Results into Aurora PostgreSQL]
+    E -->|Data Available for| F[AWS Lambda Function]
+    F -->|Vector Similarity Search| G[vg-site Front End]
+    
+    style S3 fill:#f9d,stroke:#333,stroke-width:2px;
+
 ```
 
 ## Playbook
