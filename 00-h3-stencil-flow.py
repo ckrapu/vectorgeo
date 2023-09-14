@@ -13,24 +13,25 @@ from vectorgeo.h3_utils import generate_h3_indexes_at_resolution
 from vectorgeo.transfer import upload_file
 from vectorgeo import constants as c
 
+
 class H3StencilFlow(FlowSpec):
     """
     Creates a binary raster mask of the world, where 1s represent land and 0s represent water.
     This mask is then used to stencil out H3 cells, avoiding those which are entirely water.
     """
 
-    n_cells = Parameter('n_cells',
-                        help="Number of cells in both x and y direction for binary mask",
-                        default=1000)
+    n_cells = Parameter(
+        "n_cells",
+        help="Number of cells in both x and y direction for binary mask",
+        default=1000,
+    )
 
-    h3_resolution = Parameter('h3_resolution',
-                              help="H3 resolution level",
-                              default=7)
+    h3_resolution = Parameter("h3_resolution", help="H3 resolution level", default=7)
 
-    n_batches = Parameter('n_batches',
-                            help="Number of batches to split the H3 cells into",
-                            default=8)
-    
+    n_batches = Parameter(
+        "n_batches", help="Number of batches to split the H3 cells into", default=8
+    )
+
     @step
     def start(self):
         """
@@ -43,39 +44,39 @@ class H3StencilFlow(FlowSpec):
         # f values at the end
         self.h3s = generate_h3_indexes_at_resolution(self.h3_resolution)
         print(f"After generating all h3s, there are {len(self.h3s)} cells")
-        
+
         print("Reading world geometry")
-        world_gdf = gpd.read_file('tmp/world.gpkg')
+        world_gdf = gpd.read_file("tmp/world.gpkg")
         world_gdf.geometry = world_gdf.buffer(0.05).simplify(0.1)
-        
-        # File should already be in geographic CRS - 
+
+        # File should already be in geographic CRS -
         # this is just to be sure.
-        self.world_gdf = world_gdf.to_crs('EPSG:4326')
+        self.world_gdf = world_gdf.to_crs("EPSG:4326")
 
         self.next(self.end)
 
-
     @step
     def end(self):
-
         # Create the raster
         print("Creating raster")
-        
+
         # Bounds should run over all of earth
         bounds = (-180, -90, 180, 90)
 
         transform = rio.transform.from_bounds(*bounds, self.n_cells, self.n_cells)
 
         image = features.rasterize(
-                    ((geom, 1) for geom in self.world_gdf.geometry),
-                    out_shape=(self.n_cells, self.n_cells),
-                    transform=transform
+            ((geom, 1) for geom in self.world_gdf.geometry),
+            out_shape=(self.n_cells, self.n_cells),
+            transform=transform,
         )
 
         # For all H3 cells, check whether their centroid lands on a 1 cell;
         # if they do, add them to the set. Otherwise, discard them.
         print("Processing H3 cells")
-        h3_batches = [x.tolist() for x in np.array_split(list(self.h3s), self.n_batches)]
+        h3_batches = [
+            x.tolist() for x in np.array_split(list(self.h3s), self.n_batches)
+        ]
 
         def stencil_h3_batch(h3s):
             """
@@ -83,8 +84,7 @@ class H3StencilFlow(FlowSpec):
             """
             h3s_processed = set()
 
-            for cell in tqdm(h3s):           
-
+            for cell in tqdm(h3s):
                 centroid = h3.h3_to_geo(cell)
                 lat, lng = centroid
                 row, col = rio.transform.rowcol(transform, lng, lat)
@@ -105,11 +105,11 @@ class H3StencilFlow(FlowSpec):
         filepath = os.path.join(c.TMP_DIR, filename)
 
         # Save to JSON and upload to S3
-        with open(filepath, 'w') as f:
+        with open(filepath, "w") as f:
             json.dump(list(self.h3s_processed), f)
 
-        upload_file(f'misc/{filename}', filepath)
-        
-    
-if __name__ == '__main__':
+        upload_file(f"misc/{filename}", filepath)
+
+
+if __name__ == "__main__":
     H3StencilFlow()

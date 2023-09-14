@@ -16,61 +16,59 @@ import vectorgeo.transfer as transfer
 from vectorgeo.h3_utils import H3GlobalIterator
 from vectorgeo.landcover import LandCoverPatches
 
+
 class InferenceLandCoverFlow(FlowSpec):
     """
     Flow for taking a pretrained model for land cover embedding and running inference
     on the same data, uploading the results to S3.
     """
-    
+
     inference_batch_size = Parameter(
-        'inference_batch_size',
-        help='Batch size for inference',
-        default=128)
-    
+        "inference_batch_size", help="Batch size for inference", default=128
+    )
+
     h3_resolution = Parameter(
-        'h3_resolution',
-        help='H3 resolution for inference',
-        default=7)
-    
+        "h3_resolution", help="H3 resolution for inference", default=7
+    )
+
     image_size = Parameter(
-        'image_size',
-        help='Size of the square image to extract from the raster',
-        default=32)
-    
+        "image_size",
+        help="Size of the square image to extract from the raster",
+        default=32,
+    )
+
     model_filename = Parameter(
-        'model_filename',
-        help='Filename of the model to load',
-        default="resnet-triplet-lc.pt")
-    
+        "model_filename",
+        help="Filename of the model to load",
+        default="resnet-triplet-lc.pt",
+    )
+
     embed_dim = Parameter(
-        'embed_dim',
-        help='Dimension of the embedding space',
-        default=16)
-    
+        "embed_dim", help="Dimension of the embedding space", default=16
+    )
+
     seed_latlng = Parameter(
-        'seed_latlng',
-        help='Lat/lng pair to use as seeds for inference. One job will be created for each seed',
-        default = (47.475099, -122.170557))   # Seattle, WA
-            #(48.5987, 37.9980),             # Bakhmut, Ukraine
-            #(-19.632875, 23.466110),        # Okavango Delta, Botswana
+        "seed_latlng",
+        help="Lat/lng pair to use as seeds for inference. One job will be created for each seed",
+        default=(47.475099, -122.170557),
+    )  # Seattle, WA
+    # (48.5987, 37.9980),             # Bakhmut, Ukraine
+    # (-19.632875, 23.466110),        # Okavango Delta, Botswana
 
     max_iters = Parameter(
-        'max_iters',
-        help='Maximum number of iterations to run',
-        default=None)
+        "max_iters", help="Maximum number of iterations to run", default=None
+    )
 
     device = Parameter(
-        'device',
-        help='Device to use for PyTorch operations',
-        default='cuda'
+        "device", help="Device to use for PyTorch operations", default="cuda"
     )
-    
+
     reinit_queue = Parameter(
-        'reinit_queue',
-        help='Whether or not to start the iteration over H3 cells from scratch',
-        default=True
+        "reinit_queue",
+        help="Whether or not to start the iteration over H3 cells from scratch",
+        default=True,
     )
-    
+
     @step
     def start(self):
         """
@@ -78,14 +76,11 @@ class InferenceLandCoverFlow(FlowSpec):
         """
 
         # If desired, we use this geometry to mask out ocean or other areas far outside national boundaries.
-        world_path = os.path.join(c.TMP_DIR, 'world.gpkg')
-        transfer.download_file('misc/world.gpkg', world_path)
+        world_path = os.path.join(c.TMP_DIR, "world.gpkg")
+        transfer.download_file("misc/world.gpkg", world_path)
         self.world_gdf = gpd.read_file(world_path)
-        self.world_geom =self.world_gdf \
-            .iloc[0].geometry \
-            .simplify(0.1)
-        
-       
+        self.world_geom = self.world_gdf.iloc[0].geometry.simplify(0.1)
+
         self.next(self.run_inference)
 
     @step
@@ -93,56 +88,63 @@ class InferenceLandCoverFlow(FlowSpec):
         """
         Runs inference on land cover patches, uploading to S3 when they are finished.
         """
-                
+
         key = f"models/{self.model_filename}"
         local_model_path = os.path.join(c.TMP_DIR, self.model_filename)
         transfer.download_file(key, local_model_path)
 
         # Load the PyTorch model
         self.model = torch.load(local_model_path).to(self.device)
-        self.model.eval() 
+        self.model.eval()
         print(f"Loaded model from {key}")
-        
-        lc_key = 'raw/' + c.COPERNICUS_LC_KEY
-        transfer.download_file(lc_key, c.LC_LOCAL_PATH)
-        lcp = LandCoverPatches(c.LC_LOCAL_PATH, self.world_gdf, self.image_size, full_load=True)
 
-        int_map       = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
-        int_map_fn    = np.vectorize(int_map.get)
+        lc_key = "raw/" + c.COPERNICUS_LC_KEY
+        transfer.download_file(lc_key, c.LC_LOCAL_PATH)
+        lcp = LandCoverPatches(
+            c.LC_LOCAL_PATH, self.world_gdf, self.image_size, full_load=True
+        )
+
+        int_map = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
+        int_map_fn = np.vectorize(int_map.get)
 
         seed_lat, seed_lng = self.seed_latlng
-
 
         state_filepath = os.path.join(c.TMP_DIR, c.H3_STATE_FILENAME)
 
         if not self.reinit_queue:
             print("Attempting to use existing H3 queue file...")
-            transfer.download_file(c.H3_STATE_KEY,state_filepath)
+            transfer.download_file(c.H3_STATE_KEY, state_filepath)
 
         h3_filename = f"h3s-processed-{self.h3_resolution}.json"
         h3_filepath = os.path.join(c.TMP_DIR, h3_filename)
-        h3_key = f'misc/{h3_filename}'
+        h3_key = f"misc/{h3_filename}"
         transfer.download_file(h3_key, h3_filepath)
-        
+
         print(f"Loading set of valid H3s for inference from {h3_key}")
-        with open(h3_filepath, 'r') as src:
+        with open(h3_filepath, "r") as src:
             valid_h3s = set(json.loads(src.read()))
-            
+
         print("Setting up H3 execution queue at resolution", self.h3_resolution)
-        iterator       = H3GlobalIterator(seed_lat, seed_lng, self.h3_resolution,
-                                          state_file=None if self.reinit_queue else state_filepath)
-        
-        h3_batch       = []
-        xs_batch       = []
-        zs_batch       = []
-        h3s_processed  = set()
+        iterator = H3GlobalIterator(
+            seed_lat,
+            seed_lng,
+            self.h3_resolution,
+            state_file=None if self.reinit_queue else state_filepath,
+        )
+
+        h3_batch = []
+        xs_batch = []
+        zs_batch = []
+        h3s_processed = set()
 
         rows = []
-        
+
         # Our main inference loop runs over points and when enough valid point/image pairs
         # have been found, we run them through the embedding network and then upload
         # the results to S3.
-        print("Starting inference loop for job with seed coordinates", seed_lat, seed_lng)
+        print(
+            "Starting inference loop for job with seed coordinates", seed_lat, seed_lng
+        )
         start_time = time.time()
         for i, cell in enumerate(iterator):
             if i == 0:
@@ -152,12 +154,12 @@ class InferenceLandCoverFlow(FlowSpec):
                 print(f"Inference rate: {iter_rate:.1f} iterations per second")
                 print(f"Processing cell {i}: {cell}")
                 iterator.save_state(state_filepath)
-                transfer.upload_file(c.H3_STATE_KEY, state_filepath)        
+                transfer.upload_file(c.H3_STATE_KEY, state_filepath)
 
             if self.max_iters and i >= int(self.max_iters):
                 print(f"Reached max_iters {self.max_iters}; stopping")
                 break
-                
+
             if not cell in valid_h3s:
                 continue
             try:
@@ -166,7 +168,9 @@ class InferenceLandCoverFlow(FlowSpec):
             # When there are None elements in the patch, we get a TypeError
             # and this is the least disruptive way to handle it.
             except Exception as e:
-                print(f"Found anomalous cell {cell} with error {e}. This cell will be skipped.")
+                print(
+                    f"Found anomalous cell {cell} with error {e}. This cell will be skipped."
+                )
                 continue
 
             xs_one_hot = np.zeros((c.LC_N_CLASSES, self.image_size, self.image_size))
@@ -177,26 +181,32 @@ class InferenceLandCoverFlow(FlowSpec):
             h3_batch.append(cell)
             xs_batch.append(xs_one_hot)
 
-            # We convert the H3 index to an integer which is 
+            # We convert the H3 index to an integer which is
             # allowed as an id field.
             if len(h3_batch) >= self.inference_batch_size:
-
-                xs_one_hot_tensor = torch.tensor(np.stack(xs_batch,axis=0), dtype=torch.float32).to(self.device)
+                xs_one_hot_tensor = torch.tensor(
+                    np.stack(xs_batch, axis=0), dtype=torch.float32
+                ).to(self.device)
                 with torch.no_grad():
-                    zs_batch = self.model(xs_one_hot_tensor).cpu().numpy().squeeze().tolist()
+                    zs_batch = (
+                        self.model(xs_one_hot_tensor).cpu().numpy().squeeze().tolist()
+                    )
 
                 coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
                 lats, lngs = zip(*coords)
-                        
-                rows += [{"id":int("0x"+id, 0), "vector":vector, "lat":lat, "lng":lng} for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)]
-                
+
+                rows += [
+                    {"id": int("0x" + id, 0), "vector": vector, "lat": lat, "lng": lng}
+                    for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)
+                ]
+
                 h3s_processed = h3s_processed.union(set(h3_batch))
                 h3_batch = []
                 xs_batch = []
 
             if len(rows) >= 1_000_000:
                 print(f"Uploading {len(rows)} rows to S3")
-                
+
                 # Create parquet file from timestamp
                 file_id = int(time.time())
                 filename = f"vector-upload-{file_id}.parquet"
@@ -214,6 +224,7 @@ class InferenceLandCoverFlow(FlowSpec):
         End the flow.
         """
         pass
+
 
 if __name__ == "__main__":
     InferenceLandCoverFlow()

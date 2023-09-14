@@ -27,57 +27,46 @@ from torch.utils.data import DataLoader, TensorDataset
 
 class TrainLandCoverTripletFlow(FlowSpec):
     """
-    Flow for producing training dataset of paired anchor/neighbor land cover images 
+    Flow for producing training dataset of paired anchor/neighbor land cover images
     from Copernicus LULC data. The end result is a sequence of .npy files on the targeted
     S3 bucket, each of which contains matched anchor/neighbor pairs of land use / land cover
     data encoded as integers and with the resolution specified by the `patch_size` parameter.
     """
 
-    epochs = Parameter(
-        'epochs',
-        help='Number of epochs to train for',
-        default=20)
-    
-    batch_size = Parameter(
-        'batch_size',
-        help='Batch size for training',
-        default=64)
-    
+    epochs = Parameter("epochs", help="Number of epochs to train for", default=20)
+
+    batch_size = Parameter("batch_size", help="Batch size for training", default=64)
+
     embed_dim = Parameter(
-        'embed_dim',
-        help='Dimension of the embedding space',
-        default=16)
-    
-    num_filters = Parameter(
-        'num_filters',
-        help='Number of filters in each convolutional layer',
-        default=64)
-    
-    n_linear = Parameter(
-        'n_linear',
-        help='Number of units in the final dense layers',
-        default=64)
-    
-    n_conv_blocks = Parameter(
-        'n_conv_blocks',
-        help='Number of non-downsample convolutional ResNet blocks per downsample in the embedding network',
-        default=2)
-    
-    n_train_files = Parameter(
-        'n_train_files',
-        help='Number of files to use for training',
-        default=10)
-    
-    model_filename = Parameter(
-        'model_filename',
-        help='Filename to save the model to',
-        default= "resnet-triplet-lc.pt"
+        "embed_dim", help="Dimension of the embedding space", default=16
     )
-    
+
+    num_filters = Parameter(
+        "num_filters", help="Number of filters in each convolutional layer", default=64
+    )
+
+    n_linear = Parameter(
+        "n_linear", help="Number of units in the final dense layers", default=64
+    )
+
+    n_conv_blocks = Parameter(
+        "n_conv_blocks",
+        help="Number of non-downsample convolutional ResNet blocks per downsample in the embedding network",
+        default=2,
+    )
+
+    n_train_files = Parameter(
+        "n_train_files", help="Number of files to use for training", default=10
+    )
+
+    model_filename = Parameter(
+        "model_filename",
+        help="Filename to save the model to",
+        default="resnet-triplet-lc.pt",
+    )
+
     device = Parameter(
-        'device',
-        help='Device to use for PyTorch operations',
-        default='cuda'
+        "device", help="Device to use for PyTorch operations", default="cuda"
     )
 
     @step
@@ -87,12 +76,11 @@ class TrainLandCoverTripletFlow(FlowSpec):
         """
 
         # Get list of files in the S3 bucket
-        keys = transfer.ls_s3('landcover/')
-        keys = list(filter(lambda x: x.endswith('.npy'), keys))
-        print('Found {} files'.format(len(keys)))
+        keys = transfer.ls_s3("landcover/")
+        keys = list(filter(lambda x: x.endswith(".npy"), keys))
+        print("Found {} files".format(len(keys)))
 
-
-        keys = keys[0:self.n_train_files]
+        keys = keys[0 : self.n_train_files]
         print(f"Preparing to read {len(keys)} files")
 
         arrays = []
@@ -100,7 +88,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
             local_filepath = os.path.join(c.TMP_DIR, os.path.basename(key))
             transfer.download_file(key, local_filepath)
             # Read each file in the list and append it to the arrays list
-            print('....Reading {}'.format(key))
+            print("....Reading {}".format(key))
             arr = np.load(local_filepath)
 
             print(f"Found {np.sum(np.isnan(arr))} NaNs in array")
@@ -112,9 +100,15 @@ class TrainLandCoverTripletFlow(FlowSpec):
         xs_one_hot = np.concatenate([unpack_array(xs) for xs in arrays], axis=0)
 
         self.input_shape = xs_one_hot.shape[2:]
-        anchors, positives, negatives = xs_one_hot[:, 0], xs_one_hot[:, 1], xs_one_hot[:, 2]
+        anchors, positives, negatives = (
+            xs_one_hot[:, 0],
+            xs_one_hot[:, 1],
+            xs_one_hot[:, 2],
+        )
         labels = np.zeros((len(anchors), 1))
-        print(f"Loaded {len(arrays)} files; resulting stacked array has shape {xs_one_hot.shape}")
+        print(
+            f"Loaded {len(arrays)} files; resulting stacked array has shape {xs_one_hot.shape}"
+        )
 
         # Save off a select group of images
         # to use for downstream information content
@@ -126,23 +120,25 @@ class TrainLandCoverTripletFlow(FlowSpec):
             self.n_conv_blocks,
             self.embed_dim,
             self.num_filters,
-            self.n_linear
+            self.n_linear,
         )
 
         self.embedding_network.to(self.device)  # Move model to GPU
 
         # Convert Numpy arrays to PyTorch tensors and move them to GPU
-        anchors   = torch.tensor(anchors, dtype=torch.float32).to(self.device)
+        anchors = torch.tensor(anchors, dtype=torch.float32).to(self.device)
         positives = torch.tensor(positives, dtype=torch.float32).to(self.device)
         negatives = torch.tensor(negatives, dtype=torch.float32).to(self.device)
-        labels    = torch.tensor(labels, dtype=torch.float32).to(self.device)
+        labels = torch.tensor(labels, dtype=torch.float32).to(self.device)
 
         # Create a DataLoader
         dataset = TensorDataset(anchors, positives, negatives, labels)
-        dataloader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False, drop_last=True)
+        dataloader = DataLoader(
+            dataset, batch_size=self.batch_size, shuffle=False, drop_last=True
+        )
 
         # Training loop
-        self.history = {'loss': []}
+        self.history = {"loss": []}
         print("Beginning training loop...")
         for epoch in range(self.epochs):
             print(f"Beginning epoch {epoch}...")
@@ -151,14 +147,16 @@ class TrainLandCoverTripletFlow(FlowSpec):
                 anchor_embedding = self.embedding_network(batch_anchors)
                 positive_embedding = self.embedding_network(batch_positives)
                 negative_embedding = self.embedding_network(batch_negatives)
-                merged_vector = torch.cat([anchor_embedding, positive_embedding, negative_embedding], dim=1)
+                merged_vector = torch.cat(
+                    [anchor_embedding, positive_embedding, negative_embedding], dim=1
+                )
                 loss = triplet_loss(merged_vector)
                 loss.backward()
                 optimizer.step()
-                self.history['loss'].append(loss.item())
+                self.history["loss"].append(loss.item())
 
         self.next(self.end)
-        
+
     @step
     def end(self):
         """
@@ -173,7 +171,9 @@ class TrainLandCoverTripletFlow(FlowSpec):
         transfer.upload_file(f"models/{self.model_filename}", model_path)
 
         # Convert test_batch to PyTorch tensor and run through the model
-        test_batch_tensor = torch.tensor(self.test_batch, dtype=torch.float32).to(self.device)
+        test_batch_tensor = torch.tensor(self.test_batch, dtype=torch.float32).to(
+            self.device
+        )
         with torch.no_grad():
             zs = self.embedding_network(test_batch_tensor).cpu().numpy()
 
@@ -186,7 +186,9 @@ class TrainLandCoverTripletFlow(FlowSpec):
         variance_threshold = 0.99
         variance_explained = np.cumsum(pca.explained_variance_ratio_)
         n_components = np.where(variance_explained > variance_threshold)[0][0]
-        print(f"Number of components needed to reach {variance_threshold} variance explained: {n_components}")
+        print(
+            f"Number of components needed to reach {variance_threshold} variance explained: {n_components}"
+        )
 
         # Generate a plot showing the activity of each dimension before/after PCA
         # Create a figure
@@ -216,7 +218,6 @@ class TrainLandCoverTripletFlow(FlowSpec):
         # Show the plot
         plt.savefig("figures/embeddings.png")
 
-        
 
 if __name__ == "__main__":
     TrainLandCoverTripletFlow()

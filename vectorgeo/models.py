@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+
 class ResBlockConv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
         super(ResBlockConv, self).__init__()
@@ -18,6 +19,7 @@ class ResBlockConv(nn.Module):
         out = self.bn2(out)
         out += identity
         return out
+
 
 class ResBlockDense(nn.Module):
     def __init__(self, in_features, out_features):
@@ -36,8 +38,11 @@ class ResBlockDense(nn.Module):
         out += identity
         return F.relu(out)
 
+
 class ResnetTripletEmbedding(nn.Module):
-    def __init__(self, input_shape, K, z_dim, num_filters, n_linear, num_dense_blocks=2):
+    def __init__(
+        self, input_shape, K, z_dim, num_filters, n_linear, num_dense_blocks=2
+    ):
         super(ResnetTripletEmbedding, self).__init__()
         C, H, W = input_shape
         self.encoder = nn.Sequential()
@@ -48,14 +53,18 @@ class ResnetTripletEmbedding(nn.Module):
             n_downsamples += 1
 
         for _ in range(n_downsamples):
-            self.encoder.add_module(f'conv_{_}', nn.Conv2d(C, num_filters, 3, padding=1))
+            self.encoder.add_module(
+                f"conv_{_}", nn.Conv2d(C, num_filters, 3, padding=1)
+            )
             for k in range(K):
-                self.encoder.add_module(f'resblock_conv_{k}', ResBlockConv(num_filters, num_filters, 3))
-            self.encoder.add_module(f'maxpool_{_}', nn.MaxPool2d(2, 2))
+                self.encoder.add_module(
+                    f"resblock_conv_{k}", ResBlockConv(num_filters, num_filters, 3)
+                )
+            self.encoder.add_module(f"maxpool_{_}", nn.MaxPool2d(2, 2))
             C = num_filters
 
-        self.encoder.add_module('flatten', nn.Flatten())
-        self.encoder.add_module('dense', nn.Linear(num_filters * H * W, n_linear))
+        self.encoder.add_module("flatten", nn.Flatten())
+        self.encoder.add_module("dense", nn.Linear(num_filters * H * W, n_linear))
 
         self.dense_blocks = nn.Sequential(
             *[ResBlockDense(n_linear, n_linear) for _ in range(num_dense_blocks)]
@@ -68,22 +77,34 @@ class ResnetTripletEmbedding(nn.Module):
         x = self.dense_blocks(x)
         return self.output_layer(x)
 
+
 def triplet_loss(y_pred, alpha=0.4, eta=0.1):
     total_length = y_pred.shape[1]
-    anchor, positive, negative = y_pred[:, :total_length//3], y_pred[:, total_length//3:2*total_length//3], y_pred[:, 2*total_length//3:]
+    anchor, positive, negative = (
+        y_pred[:, : total_length // 3],
+        y_pred[:, total_length // 3 : 2 * total_length // 3],
+        y_pred[:, 2 * total_length // 3 :],
+    )
 
-    pos_dist = torch.sum((anchor - positive)**2, dim=1)
-    neg_dist = torch.sum((anchor - negative)**2, dim=1)
+    pos_dist = torch.sum((anchor - positive) ** 2, dim=1)
+    neg_dist = torch.sum((anchor - negative) ** 2, dim=1)
 
-    l2_reg = torch.sum(anchor**2, dim=1) + torch.sum(positive**2, dim=1) + torch.sum(negative**2, dim=1)
+    l2_reg = (
+        torch.sum(anchor**2, dim=1)
+        + torch.sum(positive**2, dim=1)
+        + torch.sum(negative**2, dim=1)
+    )
 
     basic_loss = pos_dist - neg_dist + alpha
     loss = torch.sum(F.relu(basic_loss)) + eta * torch.sum(l2_reg)
 
     return loss
 
+
 def initialize_triplet(input_shape, n_conv_blocks, embed_dim, num_filters, n_linear):
-    embedding_network = ResnetTripletEmbedding(input_shape, n_conv_blocks, embed_dim, num_filters, n_linear)
+    embedding_network = ResnetTripletEmbedding(
+        input_shape, n_conv_blocks, embed_dim, num_filters, n_linear
+    )
     optimizer = torch.optim.Adam(embedding_network.parameters())
 
     return embedding_network, optimizer
