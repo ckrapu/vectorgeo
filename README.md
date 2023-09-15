@@ -14,7 +14,7 @@ The end product from `vectorgeo` is a globally-available data product where each
 You can access the web viewer for this data product at https://louisquissetlabs.com/vectorgeo.
 
 
-<img src="![Animation of user interaction with vectorgeo viewer](vg-user-animation-fast.gif)" width="600">
+![](vg-user-animation-fast.gif)
 
 ## Installation
 Clone the repository using these commands:
