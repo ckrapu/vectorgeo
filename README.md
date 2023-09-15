@@ -9,6 +9,13 @@
 
 The accompanying repository `vg-site` implements a light web viewer interfacing with the PostgreSQL database via an AWS Lambda function to help visualize the results overlaid on a map.
 
+The end product from `vectorgeo` is a globally-available data product where each location on the Earth's surface is assigned an embedding vector useful for tasks like clustering, regression, anomaly detection, and similarity search.
+
+You can access the web viewer for this data product at https://louisquissetlabs.com/vectorgeo.
+
+
+<img src="![Animation of user interaction with vectorgeo viewer](vg-user-animation-fast.gif)" width="600">
+
 ## Installation
 Clone the repository using these commands:
 
