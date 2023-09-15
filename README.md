@@ -32,7 +32,7 @@ This repository was designed to run its most intensive pieces on a Lambda Labs A
 Using this repository requires an S3 bucket (indicated in `constants.py`) to store files. Local copies are moved in and out of `tmp/` as required for each task. The module `vectorgeo/transfer.py` handles these exchanges with the correct bucket. **Note** the logic in `transfer.py` will avoid redownloading files if they can be found locally. To force a redownload, delete the relevant files manually from `tmp/`.
 
 ### Architecture
-The design of this project is a basic linear progression for (1) forming a training dataset, (2) training a model, (3) applying inference to the entire world, and (4) inserting the records into a vector database for similarity search on the front end. The following diagram shows the flow of data through the system:
+The design of this project is a basic linear progression for (0) identifying valid, non-ocean locations for modeling (1) forming a training dataset, (2) training a model, (3) applying inference to the entire world, and (4) inserting the records into a vector database for similarity search on the front end. The following diagram shows the flow of data through the system:
 ```mermaid
 graph TD;
     extRaster[External Raster Source] -->|00-h3-stencil-flow.py| S3[S3]
