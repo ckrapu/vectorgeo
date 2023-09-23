@@ -89,5 +89,24 @@ This workflow creates a training dataset of paired anchor/neighbor land cover im
 #### `03-inference-flow.py`
 This flow runs inference on land cover patches using a pretrained model and uploads the results to S3. It sets up several parameters including batch size for inference, H3 resolution, image size, model filename, embedding dimension, seed coordinates for inference jobs, maximum number of iterations, device for PyTorch operations, and a flag to determine whether to reinitialize the H3 cell iteration queue. The "start" step initializes the workflow by downloading a world geometry file to mask out certain areas and simplify the geometry for further use. The "run_inference" step is the core of the workflow, where it downloads the necessary pretrained model and land cover data, and sets up an H3 global iterator with the specified seed coordinates to iterate over H3 cells. During the iteration, it collects valid land cover patches, converts them to one-hot encoded tensors, and runs them through the pretrained PyTorch model to obtain embeddings, which are then batched together with their corresponding H3 cell IDs and geographic coordinates. Once a batch reaches a specified size, it is saved as a parquet file and uploaded to S3. 
 
+## Miscellanea
+
+#### Reproducing the GMTED global elevation raster
+This raster is used as a source of raw data for embedding generation. To reproduce it, do the following:
+- Download the GMTED exports from GEE by running this:
+```
+var GMTED = ee.Image('USGS/GMTED2010')
+var globe = ee.Geometry.Polygon([-180, 88, 0, 88, 180, 88, 180, -88, 0, -88, -180, -88], null, false)
+Export.image.toDrive({
+  image: GMTED,
+  description: 'gmted',
+  folder: 'gmted',
+  region: globe,
+  maxPixels: 1e13,
+  skipEmptyTiles: true
+});
+```
+- Use rasterio, gdal, or a similar tool to mosaic the raster tiles (8+ for the whole world) into a single mosaic with the command `rio merge gmted-*.tif gmted-full.tif` after downloading the GEE tiles to an appropriate local folder.
+
 
 
