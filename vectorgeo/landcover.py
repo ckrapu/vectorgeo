@@ -115,70 +115,6 @@ class LandCoverExtractor:
             else:
                 continue
 
-
-class LandCoverProportions(LandCoverExtractor):
-    def _get_proportions(self, lng_lat, radii, resolution):
-        lng, lat = lng_lat
-        h3_index = h3.geo_to_h3(lat, lng, resolution=resolution)
-
-        ring_sets = [h3.k_ring(h3_index, r) for r in radii]
-        hexagons = h3.compact(set().union(*ring_sets))
-
-        geometries = [
-            {
-                "type": "Polygon",
-                "coordinates": [
-                    [(coord[1], coord[0]) for coord in h3.h3_to_geo_boundary(hexagon)]
-                ],
-            }
-            for hexagon in hexagons
-        ]
-
-        zs = zonal_stats(
-            geometries,
-            self.raster_array,
-            affine=self.affine,
-            categorical=True,
-            all_touched=True,
-        )
-        aggregated_counts = {}
-        for stat in zs:
-            for key, value in stat.items():
-                if key != "nodata":
-                    aggregated_counts[key] = aggregated_counts.get(key, 0) + value
-
-        total_pixels = sum(aggregated_counts.values())
-        proportions = {
-            key: value / total_pixels for key, value in aggregated_counts.items()
-        }
-
-        self.logger.info(
-            f"Calculated proportions for point lat={lat:.4f}, long={lng:.4f} with {len(hexagons)} cells and radius {radii}: {proportions}"
-        )
-        return h3_index, proportions
-
-    def _expand_proportions(self, prop_dict):
-        return {
-            f"ring_{h3_ring}_{k}": inner_dict.get(k, 0)
-            for h3_ring, inner_dict in prop_dict.items()
-            for k in c.LC_LEGEND.keys()
-        }
-
-    def generate_proportions(self, N, ring_tuples, resolution):
-        points_generator = self._random_point_on_land()
-
-        for _ in trange(N):
-            point = next(points_generator)
-            proportions = {
-                radii[-1]: self._get_proportions(point, radii, resolution)[1]
-                for radii in ring_tuples
-            }
-            h3_idx = self._get_proportions(point, ring_tuples[0], resolution)[
-                0
-            ]  # Assuming the index is same for all radii
-            yield h3_idx, self._expand_proportions(proportions)
-
-
 class LandCoverPatches(LandCoverExtractor):
     def __init__(
         self, lc_path, gdf, patch_size, sameness_threshold=0.95, full_load=True
@@ -260,19 +196,3 @@ class LandCoverPatches(LandCoverExtractor):
         """
         lat, lng = h3.h3_to_geo(h3_index)
         return self._extract_patch((lng, lat))
-
-
-def upload_df_s3(df, filename, vpath, s3):
-    print(f"Beginning to upload {len(df)} rows to {filename}...")
-
-    df.to_parquet(filename)
-    s3.meta.client.upload_file(filename, c.S3_BUCKET, f"{vpath}/{filename}")
-    os.remove(filename)
-
-
-def upload_npy_s3(arr, filename, vpath, s3):
-    print(f"Beginning to upload {len(arr)} rows to {filename}...")
-
-    np.save(filename, arr)
-    s3.meta.client.upload_file(filename, c.S3_BUCKET, f"{vpath}/{filename}")
-    os.remove(filename)
