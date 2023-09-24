@@ -10,7 +10,7 @@ from rasterio import features
 from tqdm import tqdm
 
 from vectorgeo.h3_utils import generate_h3_indexes_at_resolution
-from vectorgeo.transfer import upload_file
+from vectorgeo.transfer import upload_file, download_file
 from vectorgeo import constants as c
 
 
@@ -53,6 +53,10 @@ class H3StencilFlow(FlowSpec):
         """
 
         print("Reading world geometry")
+
+        world_key, world_path = "misc/world.gpkg", os.path.join(c.TMP_DIR, "world.gpkg")
+        download_file(world_key, world_path)
+
         world_gdf = gpd.read_file("tmp/world.gpkg")
 
         # The buffer distance should be larger than the simplification

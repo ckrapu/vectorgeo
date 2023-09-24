@@ -23,6 +23,11 @@ Clone the repository using these commands:
 ```
 token=$(python -c "import yaml; print(yaml.safe_load(open('secrets.yml'))['git_token'])")
 git clone https://$token@github.com/ckrapu/vectorgeo.git
+
+pip3 install pyOpenSSL --upgrade
+cd vectorgeo
+pip3 install -r requirements.txt
+```
 ```
 
 This repository was designed to run its most intensive pieces on a Lambda Labs A10 instance with 192GB of RAM and 30 cores. Individual parts of this workflow such as the preprocess and upload may work on smaller machines.
