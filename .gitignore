@@ -3,11 +3,12 @@
 .ipynb_checkpoints
 .metaflow/
 vg-venv/
+!vg-venv/.gitkeep
 
 scratchpad.ipynb
 
 secrets.yml
-# Byte-compiled / optimized / DLL files
+
 *.pyc
 *.pyo
 __pycache__/
