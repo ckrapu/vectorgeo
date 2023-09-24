@@ -18,6 +18,8 @@ class H3StencilFlow(FlowSpec):
     """
     Creates a binary raster mask of the world, where 1s represent land and 0s represent water.
     This mask is then used to stencil out H3 cells, avoiding those which are entirely water.
+
+    We use the results of this flow to avoid running inference on sites in the middle of the ocean later on.
     """
 
     n_cells = Parameter(
@@ -39,24 +41,63 @@ class H3StencilFlow(FlowSpec):
         world geometry for masking out in the following step.
         """
 
-        # Generate all h3 cells at a given resolution by considering
-        # all hexadecimal numbers of the appropriate length with
-        # f values at the end
-        self.h3s = generate_h3_indexes_at_resolution(self.h3_resolution)
-        print(f"After generating all h3s, there are {len(self.h3s)} cells")
+        print("Starting H3 stencil flow for resolution level", self.h3_resolution)
+        
+
+        self.next(self.buffer_geoms)
+
+    @step
+    def buffer_geoms(self):
+        """
+        Simplify the world geometry before buffering it to create a raster.
+        """
 
         print("Reading world geometry")
         world_gdf = gpd.read_file("tmp/world.gpkg")
-        world_gdf.geometry = world_gdf.buffer(0.05).simplify(0.1)
+
+        # The buffer distance should be larger than the simplification
+        # tolerance to make sure that locations on land in the original
+        # geometry are still on land after the simplification
+        print("Simplifying and buffering world geometry")
+        world_gdf.geometry = world_gdf.simplify(0.1).buffer(0.2)
 
         # File should already be in geographic CRS -
         # this is just to be sure.
         self.world_gdf = world_gdf.to_crs("EPSG:4326")
-
-        self.next(self.end)
+        self.next(self.generate_h3_cells)
 
     @step
-    def end(self):
+    def generate_h3_cells(self):
+        """
+        Generates all H3 cells at a given resolution by considering
+        all hexadecimal numbers of the appropriate length with
+        f values at the end.
+        """
+
+        # Generate all h3 cells at a given resolution by considering
+        # all hexadecimal numbers of the appropriate length with
+        # f values at the end
+        print("Generating all H3 cells")
+        hexagons = parallel_map(
+        lambda x: h3.polyfill(
+            x.__geo_interface__,
+            self.h3_resolution,
+            geo_json_conformant=True
+            ), 
+            self.world_gdf.explode().geometry, 
+            )
+
+        self.h3s  = set.union(*hexagons)
+        print(f"After generating all h3s, there are {len(self.h3s)} cells")
+
+        self.next(self.stencil)
+
+    @step
+    def stencil(self):
+        """
+        Stencils out H3 cells which are close to land.
+        """
+
         # Create the raster
         print("Creating raster")
 
@@ -97,6 +138,7 @@ class H3StencilFlow(FlowSpec):
 
         self.h3s_processed = parallel_map(stencil_h3_batch, h3_batches)
         self.h3s_processed = list(set.union(*self.h3s_processed))
+        self.n_h3s = len(self.h3s_processed)
 
         # print fraction of cells which are added to set
         print(f"Retained {len(self.h3s_processed) / len(self.h3s)} of cells")
@@ -109,7 +151,13 @@ class H3StencilFlow(FlowSpec):
             json.dump(list(self.h3s_processed), f)
 
         upload_file(f"misc/{filename}", filepath)
+        self.next(self.end)
 
+
+    @step
+    def end(self):
+        print("Done! There are", self.n_h3s, "H3 cells at resolution", self.h3_resolution, "which are on or close to land.")
+        
 
 if __name__ == "__main__":
     H3StencilFlow()
