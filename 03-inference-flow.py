@@ -14,7 +14,7 @@ import vectorgeo.constants as c
 import vectorgeo.transfer as transfer
 
 from vectorgeo.h3_utils import H3GlobalIterator
-from vectorgeo.landcover import LandCoverPatches
+from vectorgeo.landcover import RasterPatches
 
 
 class InferenceLandCoverFlow(FlowSpec):
@@ -100,7 +100,7 @@ class InferenceLandCoverFlow(FlowSpec):
 
         lc_key = "raw/" + c.COPERNICUS_LC_KEY
         transfer.download_file(lc_key, c.LC_LOCAL_PATH)
-        lcp = LandCoverPatches(
+        lcp = RasterPatches(
             c.LC_LOCAL_PATH, self.world_gdf, self.image_size, full_load=True
         )
 

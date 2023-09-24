@@ -7,6 +7,15 @@ class H3GlobalIterator:
     """
     Represents the linear iteration over all H3 cells at a given resolution, starting
     at a seed resolution. Provides the ability to save and restore state.
+
+    Example of basic usage:
+    
+        ```python
+        from vectorgeo.h3_utils import H3GlobalIterator
+        iterator = H3GlobalIterator(37.7749, -122.4194, 7)
+        for h3_index in iterator:
+            print(h3_index)
+        ```
     """
 
     def __init__(self, seed_lat, seed_lng, resolution, state_file="h3_state.json"):
@@ -46,6 +55,12 @@ class H3GlobalIterator:
 
 
 def generate_h3_indexes_at_resolution(resolution):
+    """
+    Produces set of all H3 indexes at a given resolution.
+    There are probably easier ways to do this, but this one is
+    guaranteed to work regardless of how little you know about
+    the bit packing structure of H3 indexes.
+    """
     all_h3_indexes = set()
 
     # Start with the 122 base cells

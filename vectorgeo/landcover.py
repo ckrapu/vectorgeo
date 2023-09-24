@@ -42,14 +42,14 @@ def unpack_array(xs):
     return xs_one_hot
 
 
-class LandCoverExtractor:
+class RasterExtractor:
     """
-    Parent class for extracting landcover data from a raster;
+    Parent class for extracting data from a raster;
     use the child classes in practice.
     """
 
-    def __init__(self, lc_path, gdf=None, full_load=True):
-        self.lc_path = lc_path
+    def __init__(self, raster_path, gdf=None, full_load=True):
+        self.raster_path = raster_path
         self.gdf = gdf
 
         self.gdf_proj = self.gdf.to_crs("epsg:3857")
@@ -66,7 +66,7 @@ class LandCoverExtractor:
             self.raster_array = self._load_raster_data()
 
     def _read_raster_metadata(self):
-        with rasterio.open(self.lc_path) as src:
+        with rasterio.open(self.raster_path) as src:
             bounds = src.bounds
             affine = src.transform
             no_data_value = src.nodatavals[0]
@@ -74,7 +74,7 @@ class LandCoverExtractor:
         return bounds, affine, no_data_value
 
     def _load_raster_data(self):
-        with rasterio.open(self.lc_path) as src:
+        with rasterio.open(self.raster_path) as src:
             return src.read(1)
 
     def _random_point_on_land(self):
@@ -115,19 +115,40 @@ class LandCoverExtractor:
             else:
                 continue
 
-class LandCoverPatches(LandCoverExtractor):
+class RasterPatches(RasterExtractor):
+    '''
+    Class for sampling patches from raster data in accordance with triplet loss
+    model requirements (anchor, proximal positive/neighbor, and distant negative examples).
+
+    Basic example usage:
+
+        ```python
+        from vectorgeo.landcover import RasterPatches
+        raster_path = "data/landcover/landcover.tif"
+        gdf = gpd.read_file("data/landcover/landcover.gpkg")
+        patch_size = 64
+        raster_patches = RasterPatches(raster_path, gdf, patch_size)
+
+        # Generate 1000 patches
+        for (lng, lat), patch in raster_patches.generate_patches(1000):
+            print(lng, lat, patch)
+        ```
+
+
+    
+    '''
     def __init__(
-        self, lc_path, gdf, patch_size, sameness_threshold=0.95, full_load=True
+        self, raster_path, gdf, patch_size, sameness_threshold=0.95, full_load=True, pixel_size=100
     ):
-        super().__init__(lc_path, gdf, full_load=full_load)
+        super().__init__(raster_path, gdf, full_load=full_load)
         self.patch_size = patch_size  # e.g., 64 for 64x64 patches
-        self.pixel_size = 100  # meters
+        self.pixel_size = pixel_size  # meters
         self.full_load = full_load  # Whether to load the entire raster into memory
 
         # If an image is too homogeneous, we don't want to use it
         self.sameness_threshold = sameness_threshold
 
-    def _extract_patch(self, lng_lat):
+    def extract_patch(self, lng_lat):
         """
         Extract a patch of raster centered around the given coordinates.
         Assumes self.raster_array is a 2D numpy array.
@@ -143,7 +164,7 @@ class LandCoverPatches(LandCoverExtractor):
             ]
         else:
             # Read from disk
-            with rasterio.open(self.lc_path) as src:
+            with rasterio.open(self.raster_path) as src:
                 patch = src.read(
                     1,
                     window=(
@@ -163,6 +184,12 @@ class LandCoverPatches(LandCoverExtractor):
             return None  # Invalid patch, e.g., out of raster bounds
 
     def generate_patches(self, N, create_pairs=False, pair_distance_meters=8000):
+        """
+        Can generate either single (point, patch) results or pairs of neighboring
+        data pairs.
+        """
+
+
         if create_pairs:
             min_dist = self.pixel_size * self.patch_size
             max_dist = min_dist + pair_distance_meters
@@ -173,7 +200,7 @@ class LandCoverPatches(LandCoverExtractor):
         for _ in trange(N):
             if create_pairs:
                 point, point_nbr = next(points_generator)
-                patch, patch_nbr = self._extract_patch(point), self._extract_patch(
+                patch, patch_nbr = self.extract_patch(point), self.extract_patch(
                     point_nbr
                 )
                 if (
@@ -185,7 +212,7 @@ class LandCoverPatches(LandCoverExtractor):
                     yield (point, patch), (point_nbr, patch_nbr)
             else:
                 point = next(points_generator)
-                patch = self._extract_patch(point)
+                patch = self.extract_patch(point)
                 if patch is not None and np.isfinite(patch).all():
                     yield (point, patch)
 
@@ -195,4 +222,4 @@ class LandCoverPatches(LandCoverExtractor):
         Assumes self.raster_array is a 2D numpy array.
         """
         lat, lng = h3.h3_to_geo(h3_index)
-        return self._extract_patch((lng, lat))
+        return self.extract_patch((lng, lat))

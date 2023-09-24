@@ -80,7 +80,7 @@ class PreprocessLandCoverFlow(FlowSpec):
         transfer.download_file(lc_key, c.LC_LOCAL_PATH)
 
         print(f"Creating patch generator...")
-        data_generator = lc.LandCoverPatches(
+        data_generator = lc.RasterPatches(
             c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, full_load=self.full_load
         )
 

@@ -62,7 +62,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
     model_filename = Parameter(
         "model_filename",
         help="Filename to save the model to",
-        default="resnet-triplet-lc.pt",
+        required=True,        
     )
 
     device = Parameter(
