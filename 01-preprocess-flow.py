@@ -6,6 +6,7 @@ Tested resolutions include geo units and neighborhoods.
 from metaflow import (
     FlowSpec,
     Parameter,  # pylint: disable=no-name-in-module
+    retry,
     step,
 )
 
@@ -80,6 +81,7 @@ class PreprocessLandCoverFlow(FlowSpec):
 
         self.next(self.run_samplers, foreach="job_ids")
 
+    @retry
     @step
     def run_samplers(self):
         """
