@@ -65,7 +65,7 @@ To test the end-to-end workflow for land cover extraction and embedding, run the
 ```
 python3 00-h3-stencil-flow.py --no-pylint run --h3_resolution=3
 python3 01-preprocess-flow.py --no-pylint run --n_files=2 --n_jobs=3 --samples_per_file=4
-python3 02-train-flow.py      --no-pylint run --epochs=1 --n_train_files=2 --model_filename=test.keras
+python3 02-train-flow.py      --no-pylint run --epochs=1 --n_train=20 --model_filename=test.keras --device=cpu
 python3 03-inference-flow.py  --no-pylint run --max_iters=10 --model_filename=test.keras
 ```
 
@@ -74,8 +74,8 @@ Currently, the full end-to-end workflow can be executed by running the following
 ```
 python3 00-h3-stencil-flow.py --no-pylint run --h3_resolution=7
 python3 01-preprocess-flow.py --no-pylint run --n_files=100 --n_jobs=3 --samples_per_file=5000
-python3 02-train-flow.py      --no-pylint run --epochs=100 --n_train_files=100 --model_filename=resnet-triplet-lc.pt
-python3 03-inference-flow.py  --no-pylint run --model_filename=resnet-triplet-lc.pt
+python3 02-train-flow.py      --no-pylint run --epochs=100 --n_train=500000 --model_filename=resnet-triplet-lc-large.pt
+python3 03-inference-flow.py  --no-pylint run --model_filename=resnet-triplet-lc-large.pt
 python3 04-upload-aurora.py   --no-pylint run
 ```
 

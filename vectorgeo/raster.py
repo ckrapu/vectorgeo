@@ -10,6 +10,20 @@ from pyproj import Transformer
 from rasterstats import zonal_stats
 from tqdm import trange
 
+def extend_negatives(xs):
+    """
+    Takes in arrays of anchor-neighbor pairs and extends them to include
+    negative examples. The negative examples are simply randomly shuffled
+    versions of the neighbors. This assumes that the shape is 
+    (N, C, H, W, 2) where C is the number of classes/channels and the last axis
+    is for anchor-neighbor pairs.
+    """
+
+    xs_neg = xs[..., 1:2].copy()
+    np.random.shuffle(xs_neg)
+    xs = np.concatenate([xs, xs_neg], axis=-1)
+
+    return xs
 
 def unpack_array(xs):
     """
@@ -21,9 +35,8 @@ def unpack_array(xs):
 
     :param xs: (N, C, H, W, K) array of integers
     """
-    xs_neg = xs[..., 1:2].copy()
-    np.random.shuffle(xs_neg)
-    xs = np.concatenate([xs, xs_neg], axis=-1)
+
+    xs = extend_negatives(xs)
 
     N, C, H, W, K = xs.shape
     xs_one_hot = np.zeros((N, c.LC_N_CLASSES, H, W, K))

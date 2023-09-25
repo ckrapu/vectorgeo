@@ -17,7 +17,7 @@ from matplotlib import gridspec
 from sklearn.decomposition import PCA
 
 from vectorgeo.models import initialize_triplet, triplet_loss
-from vectorgeo.raster import unpack_array
+from vectorgeo.raster import unpack_array, extend_negatives
 from vectorgeo import transfer
 from vectorgeo import constants as c
 
@@ -55,8 +55,10 @@ class TrainLandCoverTripletFlow(FlowSpec):
         default=2,
     )
 
-    n_train_files = Parameter(
-        "n_train_files", help="Number of files to use for training", default=10
+    n_train = Parameter(
+        "n_train",
+        help="Number of training examples to use for training",
+        default=500_000,
     )
 
     model_filename = Parameter(
@@ -78,12 +80,10 @@ class TrainLandCoverTripletFlow(FlowSpec):
         # Get list of files in the S3 bucket
         keys = transfer.ls_s3("train/")
         keys = list(filter(lambda x: x.endswith(".npy"), keys))
-        print("Found {} files".format(len(keys)))
-
-        keys = keys[0 : self.n_train_files]
-        print(f"Preparing to read {len(keys)} files")
+        print("Found training data files {} files".format(len(keys)))
 
         arrays = []
+        n_loaded = 0
         for key in keys:
             local_filepath = os.path.join(c.TMP_DIR, os.path.basename(key))
             transfer.download_file(key, local_filepath)
@@ -93,27 +93,48 @@ class TrainLandCoverTripletFlow(FlowSpec):
 
             print(f"Found {np.sum(np.isnan(arr))} NaNs in array")
             arrays += [arr]
+            n_loaded += len(arr)
+
+            if n_loaded > self.n_train:
+                print(f"Loaded {n_loaded} samples; stopping")
+                break
 
         # Convert from integer to one-hot encoding
         # We don't preprocess as one-hot because the storage is way larger.
         print(f"Unpacking {len(arrays)} arrays...")
-        xs_one_hot = np.concatenate([unpack_array(xs) for xs in arrays], axis=0)
 
-        self.input_shape = xs_one_hot.shape[2:]
+        # The shape of the arrays is (N, 3, K, H, W) where the 3 is for 
+        # anchor, positive, negative and the K is for the different classes.
+        xs_one_hot = np.concatenate([unpack_array(xs[:, [0]]) for xs in arrays], axis=0)
+        print(f"Shape of land cover trainin component: {xs_one_hot.shape}")
+
+        xs_dem = np.concatenate([xs[:, 1] for xs in arrays], axis=0)
+        xs_dem = extend_negatives(xs_dem)
+
+        # Move last axis to be second and add a singleton dimension
+        # for concatenation with the one-hot encoded data
+        xs_dem = np.transpose(xs_dem, (0, 3, 1, 2))[:, :, np.newaxis]
+
+        print(f"Shape of DEM training component: {xs_dem.shape}")
+
+        xs_combined = np.concatenate([xs_one_hot, xs_dem], axis=2)
+        print(f"Shape of combined training component: {xs_combined.shape}")
+
+        self.input_shape = xs_combined.shape[2:]
         anchors, positives, negatives = (
-            xs_one_hot[:, 0],
-            xs_one_hot[:, 1],
-            xs_one_hot[:, 2],
+            xs_combined[:, 0],
+            xs_combined[:, 1],
+            xs_combined[:, 2],
         )
         labels = np.zeros((len(anchors), 1))
         print(
-            f"Loaded {len(arrays)} files; resulting stacked array has shape {xs_one_hot.shape}"
+            f"Loaded {len(arrays)} files; resulting stacked array has shape {xs_combined.shape}"
         )
 
         # Save off a select group of images
         # to use for downstream information content
         # assessment with PCA
-        self.test_batch = xs_one_hot[0:1024, 0]
+        self.test_batch = xs_combined[0:1024, 0]
         print("Initializing triplet model...")
         self.embedding_network, optimizer = initialize_triplet(
             self.input_shape,
