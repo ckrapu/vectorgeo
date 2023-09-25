@@ -66,6 +66,13 @@ class PreprocessLandCoverFlow(FlowSpec):
 
         self.job_ids = range(self.n_jobs)
         self.int_map = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
+
+        lc_key = "raw/" + c.COPERNICUS_LC_KEY
+        transfer.download_file(lc_key, c.LC_LOCAL_PATH)
+
+        dem_key = "raw/" + c.GMTED_DEM_KEY
+        transfer.download_file(dem_key, c.DEM_LOCAL_PATH)
+
         self.next(self.run_samplers, foreach="job_ids")
 
     @step
@@ -75,12 +82,6 @@ class PreprocessLandCoverFlow(FlowSpec):
         land cover patches and store them as Numpy arrays on S3.
         """
         self.uploaded_filekeys = []
-
-        lc_key = "raw/" + c.COPERNICUS_LC_KEY
-        transfer.download_file(lc_key, c.LC_LOCAL_PATH)
-
-        dem_key = "raw/" + c.GMTED_DEM_KEY
-        transfer.download_file(dem_key, c.DEM_LOCAL_PATH)
 
         print(f"Creating patch generator...")
         lulc_generator = lc.RasterPatches(
