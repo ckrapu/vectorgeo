@@ -1,8 +1,3 @@
-"""MetaFlow flow for identifying dominant geographical units for each user on the basis of their viewing history.
-
-Tested resolutions include geo units and neighborhoods.
-"""
-
 from metaflow import (
     FlowSpec,
     Parameter,  # pylint: disable=no-name-in-module

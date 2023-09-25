@@ -186,12 +186,14 @@ class RasterPatches(RasterExtractor):
                         (col - half_size, col + half_size),
                     ),
                 )
+                
+        if patch is None:
+            return None
 
         homogeneity = np.unique(patch, return_counts=True)[1].max() / patch.size
 
         if (
-            patch is not None
-            and patch.shape == (self.patch_size, self.patch_size)
+            patch.shape == (self.patch_size, self.patch_size)
             and homogeneity < self.sameness_threshold
         ):
             return patch
