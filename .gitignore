@@ -13,6 +13,8 @@ secrets.yml
 *.pyo
 __pycache__/
 
+*.png
+
 # Produced data types
 *.npy
 *.tif
