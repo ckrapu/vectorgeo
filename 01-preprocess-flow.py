@@ -48,7 +48,7 @@ class PreprocessLandCoverFlow(FlowSpec):
 
     full_load = Parameter(
         "full_load",
-        help="Whether or not to attempt to load the full Copernicus land cover .tif into memory",
+        help="Whether or not to attempt to load full raster files into memory",
         default=False,
     )
 
@@ -157,7 +157,7 @@ class PreprocessLandCoverFlow(FlowSpec):
             patches_array = np.concatenate([patches_array, dem_patches_array], axis=1)
 
             filename = (
-                f"lulc-patches-pairs-{self.patch_size}x{self.patch_size}-{file_id}.npy"
+                f"lc-dem-patches-pairs-{self.patch_size}x{self.patch_size}-{file_id}.npy"
             )
             filepath = os.path.join(c.TMP_DIR, filename)
 
