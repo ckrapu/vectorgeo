@@ -28,7 +28,6 @@ pip3 install pyOpenSSL --upgrade
 cd vectorgeo
 pip3 install -r requirements.txt
 ```
-```
 
 This repository was designed to run its most intensive pieces on a Lambda Labs A10 instance with 192GB of RAM and 30 cores. Individual parts of this workflow such as the preprocess and upload may work on smaller machines.
 
@@ -79,6 +78,11 @@ python3 02-train-flow.py      --no-pylint run --epochs=100 --n_train_files=100 -
 python3 03-inference-flow.py  --no-pylint run --model_filename=resnet-triplet-lc.pt
 python3 04-upload-aurora.py   --no-pylint run
 ```
+
+### CLI utilities
+This project uses `invoke` to perform some common tasks:
+- `inv s3-size` will print the total size of the S3 bucket
+- `inv s3-delete-train` will delete all files in the S3 bucket with the prefix `train/`
 
 ## Flow details
 
