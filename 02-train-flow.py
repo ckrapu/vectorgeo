@@ -17,7 +17,7 @@ from matplotlib import gridspec
 from sklearn.decomposition import PCA
 
 from vectorgeo.models import initialize_triplet, triplet_loss
-from vectorgeo.landcover import unpack_array
+from vectorgeo.raster import unpack_array
 from vectorgeo import transfer
 from vectorgeo import constants as c
 
@@ -76,7 +76,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
         """
 
         # Get list of files in the S3 bucket
-        keys = transfer.ls_s3("landcover/")
+        keys = transfer.ls_s3("train/")
         keys = list(filter(lambda x: x.endswith(".npy"), keys))
         print("Found {} files".format(len(keys)))
 

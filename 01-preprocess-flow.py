@@ -13,7 +13,7 @@ import time
 import numpy as np
 import geopandas as gpd
 import os
-from vectorgeo import landcover as lc
+from vectorgeo import raster as lc
 from vectorgeo import constants as c
 from vectorgeo import transfer
 
@@ -79,9 +79,16 @@ class PreprocessLandCoverFlow(FlowSpec):
         lc_key = "raw/" + c.COPERNICUS_LC_KEY
         transfer.download_file(lc_key, c.LC_LOCAL_PATH)
 
+        dem_key = "raw/" + c.GMTED_DEM_KEY
+        transfer.download_file(dem_key, c.DEM_LOCAL_PATH)
+
         print(f"Creating patch generator...")
-        data_generator = lc.RasterPatches(
+        lulc_generator = lc.RasterPatches(
             c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, full_load=self.full_load
+        )
+
+        dem_generator = lc.RasterPatches(
+            c.DEM_LOCAL_PATH, self.world_gdf, self.patch_size, full_load=self.full_load
         )
 
         print(
@@ -93,7 +100,7 @@ class PreprocessLandCoverFlow(FlowSpec):
             all_patches, all_patch_nbrs = [], []
             all_pts, all_pt_nbrs = [], []
 
-            for (pt, patch), (pt_nbr, patch_nbr) in data_generator.generate_patches(
+            for (pt, patch), (pt_nbr, patch_nbr) in lulc_generator.generate_patches(
                 self.samples_per_file, create_pairs=True, pair_distance_meters=8_000
             ):
                 all_patches.append(patch)
@@ -118,8 +125,36 @@ class PreprocessLandCoverFlow(FlowSpec):
                     f"Found {np.sum(has_nones)} patches with NaNs or 255s; removing them..."
                 )
 
+            # At this point, the shape is (N, 1, ny, nx, 2) where the 2 is for
+            # the anchor-neighbor pair.
             patches_array = patches_array[~has_nones]
             patches_array = np.vectorize(self.int_map.get)(patches_array)
+
+            # Using the point lists, use the DEM generator's extract_patch
+            # method to get the DEM images for each point, check them for NaNs
+            # and then concat them with the land cover data.
+            dem_patches = []
+            dem_patches_nbr = []
+
+            for pt, pt_nbr in zip(all_pts, all_pt_nbrs):
+                dem_patch = dem_generator.extract_patch(pt)
+                dem_patch_nbr = dem_generator.extract_patch(pt_nbr)
+
+                if dem_patch is None or dem_patch_nbr is None:
+                    raise ValueError("DEM patch is None")
+
+                if dem_patch is not None and dem_patch_nbr is not None:
+                    dem_patches.append(dem_patch)
+                    dem_patches_nbr.append(dem_patch_nbr)
+
+            dem_patches = np.array(dem_patches).reshape(*out_shape)
+            dem_patches_nbr = np.array(dem_patches_nbr).reshape(*out_shape)
+
+            dem_patches_array  = np.stack([dem_patches, dem_patches_nbr], axis=-1)
+
+            # Here, shape should be (N, 2, ny, nx, 2) where the second axis
+            # runs over [landcover, DEM] and the last axis runs over [anchor, neighbor]
+            patches_array = np.concatenate([patches_array, dem_patches_array], axis=1)
 
             filename = (
                 f"lulc-patches-pairs-{self.patch_size}x{self.patch_size}-{file_id}.npy"
@@ -127,7 +162,7 @@ class PreprocessLandCoverFlow(FlowSpec):
             filepath = os.path.join(c.TMP_DIR, filename)
 
             np.save(filepath, patches_array)
-            key = f"landcover/{filename}"
+            key = f"train/{filename}"
             transfer.upload_file(key, filepath)
             self.uploaded_filekeys.append(filename)
 

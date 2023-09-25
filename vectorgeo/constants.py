@@ -47,6 +47,9 @@ LC_H3_RES = 10
 LC_N_CLASSES = 23
 LC_LOCAL_PATH = os.path.join(TMP_DIR, COPERNICUS_LC_KEY)
 
+GMTED_DEM_KEY = "gmted-full.tif"
+DEM_LOCAL_PATH = os.path.join(TMP_DIR, GMTED_DEM_KEY)
+
 H3_STATE_FILENAME = "h3-state.json"
 H3_STATE_KEY = f"misc/{H3_STATE_FILENAME}"
 

@@ -14,7 +14,7 @@ import vectorgeo.constants as c
 import vectorgeo.transfer as transfer
 
 from vectorgeo.h3_utils import H3GlobalIterator
-from vectorgeo.landcover import RasterPatches
+from vectorgeo.raster import RasterPatches
 
 
 class InferenceLandCoverFlow(FlowSpec):

@@ -89,7 +89,10 @@ class RasterExtractor:
     def _random_pair_on_land(self, min_radius_meters, max_radius_meters):
         """
         Returns pairs of points within radius_meters of each other
-        that are both on land and which are in a geographic CRS.
+        that are both on land and which are in a geographic CRS. To make sure
+        that there is no overlap between imagery extracted from the two points,
+        we sample from an annular region between min_radius_meters and max_radius_meters.
+
         """
 
         # Generate a random point on land
@@ -103,10 +106,8 @@ class RasterExtractor:
             if c.LC_MIN_LAT < lat < c.LC_MAX_LAT:
                 # Sample point randomly from disk within radius_meters
                 # of the first point
-                theta = np.random.uniform(0, 2 * np.pi)
-                r = np.random.uniform(min_radius_meters, max_radius_meters)
-                dx = r * np.cos(theta)
-                dy = r * np.sin(theta)
+                theta, r = np.random.uniform(0, 2 * np.pi), np.random.uniform(min_radius_meters, max_radius_meters)
+                dx, dy = r * np.cos(theta),  r * np.sin(theta)
 
                 # Convert back to lat/long
                 lat_nbr, lng_nbr = self.transform_to_geo.transform(x + dx, y + dy)
@@ -124,8 +125,8 @@ class RasterPatches(RasterExtractor):
 
         ```python
         from vectorgeo.landcover import RasterPatches
-        raster_path = "data/landcover/landcover.tif"
-        gdf = gpd.read_file("data/landcover/landcover.gpkg")
+        raster_path = "data/train/landcover.tif"
+        gdf = gpd.read_file("data/train/landcover.gpkg")
         patch_size = 64
         raster_patches = RasterPatches(raster_path, gdf, patch_size)
 
