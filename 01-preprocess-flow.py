@@ -59,6 +59,9 @@ class PreprocessLandCoverFlow(FlowSpec):
         Loads the boundary shapefile for all countries and starts the sampler.
         """
 
+        n_samples_total = self.n_files * self.samples_per_file
+        print(f"Generating {n_samples_total} samples total across {self.n_files} files")
+
         # Shapefile with a single geometry indicating boundaries / coastlines for all countries
         world_key, world_path = "misc/world.gpkg", os.path.join(c.TMP_DIR, "world.gpkg")
         transfer.download_file(world_key, world_path)
@@ -66,6 +69,8 @@ class PreprocessLandCoverFlow(FlowSpec):
         self.world_gdf = gpd.read_file(world_path, driver="GPKG")
 
         self.job_ids = range(self.n_jobs)
+
+        # Use these to convert the ungainly string-valued land cover classes to integers
         self.int_map = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
 
         lc_key = "raw/" + c.COPERNICUS_LC_KEY
