@@ -80,9 +80,10 @@ python3 04-upload-aurora.py   --no-pylint run
 ```
 
 ### CLI utilities
-This project uses `invoke` to perform some common tasks:
+This project uses [`invoke`](https://www.pyinvoke.org/) to perform some common tasks:
 - `inv s3-size` will print the total size of the S3 bucket
 - `inv s3-delete-train` will delete all files in the S3 bucket with the prefix `train/`
+- `inv aurora-summary`  will return the number of rows on RDS as well as the geographic extent of the data
 
 ## Flow details
 
