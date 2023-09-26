@@ -1,8 +1,3 @@
-"""MetaFlow flow for identifying dominant geographical units for each user on the basis of their viewing history.
-
-Tested resolutions include geo units and neighborhoods.
-"""
-
 from metaflow import (
     FlowSpec,
     Parameter,  # pylint: disable=no-name-in-module
@@ -88,10 +83,9 @@ class TrainLandCoverTripletFlow(FlowSpec):
             local_filepath = os.path.join(c.TMP_DIR, os.path.basename(key))
             transfer.download_file(key, local_filepath)
             # Read each file in the list and append it to the arrays list
-            print("....Reading {}".format(key))
             arr = np.load(local_filepath)
+            print(f"....Read file at {key} with {np.sum(np.isnan(arr))} NaNs in array")
 
-            print(f"Found {np.sum(np.isnan(arr))} NaNs in array")
             arrays += [arr]
             n_loaded += len(arr)
 

@@ -5,8 +5,9 @@ source vg-venv/bin/activate
 pip install wheel
 pip install -r requirements.txt
 python -m ipykernel install --user --name vg-venv --display-name "vectorgeo"
+pip install -e .
 
-sudo apt-get install jq
+yes | sudo apt-get install jq
 
 # Read the YAML file (secrets.yml) and get the values for aws_access_key_id and aws_secret_access_key
 AWS_ACCESS_KEY_ID=$(yq .aws_access_key_id secrets.yml)
