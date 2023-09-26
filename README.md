@@ -118,5 +118,5 @@ Export.image.toDrive({
 ```
 - Use rasterio, gdal, or a similar tool to mosaic the raster tiles (8+ for the whole world) into a single mosaic with the command `rio merge gmted-*.tif gmted-full.tif` after downloading the GEE tiles to an appropriate local folder.
 
-
-
+#### Technical notes for LC / DEM packaging
+The input shape for the data batches immediately prior before ingestion into the embedding network is `(N, C, H, W)` where the `C` axis runs over the different one-hot encoded land cover classes and an additional channel for the DEM.

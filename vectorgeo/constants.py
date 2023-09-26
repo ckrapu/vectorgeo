@@ -12,6 +12,13 @@ EMBED_VPATH = "embeddings"
 EMBED_DIM = 16
 QDRANT_COLLECTION_NAME = "vectorgeo"
 
+LC_RES_M  = 100
+DEM_RES_M = 250
+
+INFERENCE_UPLOAD_BATCH_SIZE = 1_000_000
+AURORA_UPLOAD_BATCH_SIZE = 200_000
+
+
 # Landcover-specific settings
 LC_LEGEND = {
     0: "Unknown",

@@ -64,6 +64,18 @@ class RasterExtractor:
     """
 
     def __init__(self, raster_path, gdf=None, full_load=True):
+        """
+        Arguments:
+        ----------
+        raster_path: str
+            Path to the raster file to extract patches from
+        gdf: GeoDataFrame
+            Masking geometry to use for sampling patches; patches will only be sampled
+            from locations that are within the masking geometry.
+        full_load: bool
+            Whether to load the entire raster into memory versus using a windowed reading method
+        """
+        
         self.raster_path = raster_path
         self.gdf = gdf
 
@@ -162,10 +174,28 @@ class RasterPatches(RasterExtractor):
         raster_path,
         gdf,
         patch_size,
+        pixel_size,
         sameness_threshold=0.95,
         full_load=True,
-        pixel_size=100,
     ):
+        '''
+        Arguments:
+        ----------
+        raster_path: str
+            Path to the raster file to extract patches from
+        gdf: GeoDataFrame
+            Masking geometry to use for sampling patches; patches will only be sampled
+            from locations that are within the masking geometry.
+        patch_size: int
+            Size of the patches to extract, in pixels
+        pixel_size: float
+            Size of each raw pixel in meters
+        sameness_threshold: float
+            Threshold for determining whether a patch is too homogeneous to be useful
+        full_load: bool
+            Whether to load the entire raster into memory versus using a windowed reading method
+        '''
+        
         super().__init__(raster_path, gdf, full_load=full_load)
         self.patch_size = patch_size  # e.g., 64 for 64x64 patches
         self.pixel_size = pixel_size  # meters

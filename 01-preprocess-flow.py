@@ -88,10 +88,10 @@ class PreprocessLandCoverFlow(FlowSpec):
         # Initialize patch generators
         print("Creating patch generator...")
         lulc_generator = lc.RasterPatches(
-            c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, full_load=self.full_load
+            c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, c.LC_RES_M, full_load=self.full_load
         )
         dem_generator = lc.RasterPatches(
-            c.DEM_LOCAL_PATH, self.world_gdf, self.patch_size, full_load=self.full_load
+            c.DEM_LOCAL_PATH, self.world_gdf, self.patch_size, c.DEM_RES_M, full_load=self.full_load
         )
 
         # Generate files with samples
@@ -113,6 +113,10 @@ class PreprocessLandCoverFlow(FlowSpec):
             ):
                 dem_patch = dem_generator.extract_patch(pt)
                 dem_patch_nbr = dem_generator.extract_patch(pt_nbr)
+
+                # Normalize DEM patches to have zero minima
+                dem_patch -= np.min(dem_patch)
+                dem_patch_nbr -= np.min(dem_patch_nbr)
 
                 # Skip if any patch is None
                 if any(x is None for x in [dem_patch, dem_patch_nbr, patch, patch_nbr]):
@@ -264,10 +268,10 @@ class PreprocessLandCoverFlow(FlowSpec):
         # Initialize patch generators
         print("Creating patch generator...")
         lulc_generator = lc.RasterPatches(
-            c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, full_load=self.full_load
+            c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, c.LC_RES_M, full_load=self.full_load
         )
         dem_generator = lc.RasterPatches(
-            c.DEM_LOCAL_PATH, self.world_gdf, self.patch_size, full_load=self.full_load
+            c.DEM_LOCAL_PATH, self.world_gdf, self.patch_size, c.DEM_RES_M, full_load=self.full_load
         )
 
         # Generate files with samples

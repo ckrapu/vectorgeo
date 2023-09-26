@@ -13,7 +13,6 @@ from metaflow import FlowSpec, Parameter, step
 import vectorgeo.constants as c
 import vectorgeo.transfer as transfer
 
-from vectorgeo.h3_utils import H3GlobalIterator
 from vectorgeo.raster import RasterPatches
 
 
@@ -24,7 +23,7 @@ class InferenceLandCoverFlow(FlowSpec):
     """
 
     inference_batch_size = Parameter(
-        "inference_batch_size", help="Batch size for inference", default=128
+        "inference_batch_size", help="Batch size for inference", default=256
     )
 
     h3_resolution = Parameter(
@@ -46,27 +45,13 @@ class InferenceLandCoverFlow(FlowSpec):
     embed_dim = Parameter(
         "embed_dim", help="Dimension of the embedding space", default=16
     )
-
-    seed_latlng = Parameter(
-        "seed_latlng",
-        help="Lat/lng pair to use as seeds for inference. One job will be created for each seed",
-        default=(47.475099, -122.170557),
-    )  # Seattle, WA
-    # (48.5987, 37.9980),             # Bakhmut, Ukraine
-    # (-19.632875, 23.466110),        # Okavango Delta, Botswana
-
+    
     max_iters = Parameter(
         "max_iters", help="Maximum number of iterations to run", default=None
     )
 
     device = Parameter(
         "device", help="Device to use for PyTorch operations", default="cuda"
-    )
-
-    reinit_queue = Parameter(
-        "reinit_queue",
-        help="Whether or not to start the iteration over H3 cells from scratch",
-        default=True,
     )
 
     @step
@@ -80,6 +65,12 @@ class InferenceLandCoverFlow(FlowSpec):
         transfer.download_file("misc/world.gpkg", world_path)
         self.world_gdf = gpd.read_file(world_path)
         self.world_geom = self.world_gdf.iloc[0].geometry.simplify(0.1)
+
+        # Make sure we have DEM / LC raster data as well.
+        dem_key = "raw/" + c.GMTED_DEM_KEY
+        transfer.download_file(dem_key, c.DEM_LOCAL_PATH)
+        lc_key = "raw/" + c.COPERNICUS_LC_KEY
+        transfer.download_file(lc_key, c.LC_LOCAL_PATH)
 
         self.next(self.run_inference)
 
@@ -98,22 +89,18 @@ class InferenceLandCoverFlow(FlowSpec):
         self.model.eval()
         print(f"Loaded model from {key}")
 
-        lc_key = "raw/" + c.COPERNICUS_LC_KEY
-        transfer.download_file(lc_key, c.LC_LOCAL_PATH)
-        lcp = RasterPatches(
-            c.LC_LOCAL_PATH, self.world_gdf, self.image_size, full_load=True
+        lc_generator = RasterPatches(
+            c.LC_LOCAL_PATH, self.world_gdf, self.image_size, c.LC_RES_M, full_load=True
         )
 
+        dem_generator = RasterPatches(
+            c.DEM_LOCAL_PATH, self.world_gdf, self.image_size, c.DEM_RES_M, full_load=True
+        )
+        
         int_map = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
         int_map_fn = np.vectorize(int_map.get)
 
-        seed_lat, seed_lng = self.seed_latlng
-
         state_filepath = os.path.join(c.TMP_DIR, c.H3_STATE_FILENAME)
-
-        if not self.reinit_queue:
-            print("Attempting to use existing H3 queue file...")
-            transfer.download_file(c.H3_STATE_KEY, state_filepath)
 
         h3_filename = f"h3s-processed-{self.h3_resolution}.json"
         h3_filepath = os.path.join(c.TMP_DIR, h3_filename)
@@ -123,66 +110,50 @@ class InferenceLandCoverFlow(FlowSpec):
         print(f"Loading set of valid H3s for inference from {h3_key}")
         with open(h3_filepath, "r") as src:
             valid_h3s = set(json.loads(src.read()))
+        valid_h3s = sorted(list(valid_h3s))
 
-        print("Setting up H3 execution queue at resolution", self.h3_resolution)
-        iterator = H3GlobalIterator(
-            seed_lat,
-            seed_lng,
-            self.h3_resolution,
-            state_file=None if self.reinit_queue else state_filepath,
-        )
-
-        h3_batch = []
-        xs_batch = []
-        zs_batch = []
-        h3s_processed = set()
-
-        rows = []
+        h3_batch, xs_batch, zs_batch, upload_batch = [], [], [], []
+        self.h3s_processed = set()
 
         # Our main inference loop runs over points and when enough valid point/image pairs
         # have been found, we run them through the embedding network and then upload
         # the results to S3.
-        print(
-            "Starting inference loop for job with seed coordinates", seed_lat, seed_lng
-        )
         start_time = time.time()
-        for i, cell in enumerate(iterator):
-            if i == 0:
-                print("Starting first iteration...")
+        print("Starting first iteration...")
+        n_cells = len(valid_h3s)
+        for i, cell in enumerate(valid_h3s):
             if i % 1_000_000 == 0 and i > 0:
                 iter_rate = i / (time.time() - start_time)
-                print(f"Inference rate: {iter_rate:.1f} iterations per second")
-                print(f"Processing cell {i}: {cell}")
-                iterator.save_state(state_filepath)
+                print(f"Processing cell {cell} ({i}/{n_cells}) with inference rate: {iter_rate:.1f} iterations per second")
                 transfer.upload_file(c.H3_STATE_KEY, state_filepath)
 
             if self.max_iters and i >= int(self.max_iters):
                 print(f"Reached max_iters {self.max_iters}; stopping")
                 break
 
-            if not cell in valid_h3s:
-                continue
-            try:
-                xs = int_map_fn(lcp.h3_to_patch(cell))
-
             # When there are None elements in the patch, we get a TypeError
             # and this is the least disruptive way to handle it.
+            try:
+                xs_lc  = int_map_fn(lc_generator.h3_to_patch(cell))
+                xs_dem = dem_generator.h3_to_patch(cell)
             except Exception as e:
                 print(
                     f"Found anomalous cell {cell} with error {e}. This cell will be skipped."
                 )
                 continue
 
+            xs_dem -= np.min(xs_dem)
             xs_one_hot = np.zeros((c.LC_N_CLASSES, self.image_size, self.image_size))
 
             for j in range(c.LC_N_CLASSES):
-                xs_one_hot[j] = (xs == j).squeeze().astype(int)
+                xs_one_hot[j] = (xs_lc == j).squeeze().astype(int)
 
             h3_batch.append(cell)
-            xs_batch.append(xs_one_hot)
-
-            # We convert the H3 index to an integer which is
-            # allowed as an id field.
+            xs_batch.append(np.concatenate([xs_one_hot, xs_dem], axis=0))
+    
+            # NOTE: we have two different batch sizes at this stage - 
+            # the first is for inference on the GPU and the second
+            # is for uploading data to S3.
             if len(h3_batch) >= self.inference_batch_size:
                 xs_one_hot_tensor = torch.tensor(
                     np.stack(xs_batch, axis=0), dtype=torch.float32
@@ -193,28 +164,25 @@ class InferenceLandCoverFlow(FlowSpec):
                     )
 
                 coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
-                lats, lngs = zip(*coords)
 
-                rows += [
-                    {"id": int("0x" + id, 0), "vector": vector, "lat": lat, "lng": lng}
-                    for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)
+                upload_batch += [
+                    {"id": id, "vector": vector, "lat": lat, "lng": lng}
+                    for id, vector, lng, lat in zip(h3_batch, zs_batch, *coords)
                 ]
 
-                h3s_processed = h3s_processed.union(set(h3_batch))
-                h3_batch = []
-                xs_batch = []
+                self.h3s_processed = self.h3s_processed.union(set(h3_batch))
+                h3_batch, xs_batch = [], []
 
-            if len(rows) >= 1_000_000:
-                print(f"Uploading {len(rows)} rows to S3")
+            if len(upload_batch) >= c.INFERENCE_UPLOAD_BATCH_SIZE:
+                print(f"Uploading batch of {len(upload_batch)} rows to S3")
 
-                # Create parquet file from timestamp
-                file_id = int(time.time())
+                file_id = f"{upload_batch[0]['id']}-{upload_batch[-1]['id']}"
                 filename = f"vector-upload-{file_id}.parquet"
                 filepath = os.path.join(c.TMP_DIR, filename)
-                df = pd.DataFrame(rows)
-                df.to_parquet(filepath)
+
+                pd.DataFrame(upload_batch).to_parquet(filepath)
                 transfer.upload_file(f"vectors/{filename}", filepath)
-                rows = []
+                upload_batch = []
 
         self.next(self.end)
 
