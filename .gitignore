@@ -5,6 +5,9 @@
 vg-venv/
 !vg-venv/.gitkeep
 
+tmp/
+!tmp/.gitkeep
+
 scratchpad.ipynb
 
 secrets.yml
