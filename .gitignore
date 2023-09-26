@@ -15,6 +15,7 @@ secrets.yml
 *.pyc
 *.pyo
 __pycache__/
+vectorgeo.egg-info/
 
 *.png
 
