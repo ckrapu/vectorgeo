@@ -6,14 +6,14 @@ from vectorgeo import constants as c
 N_LISTS = 100
 
 # Load secrets from the secrets.yml file
-with open('secrets.yml', 'r') as file:
+with open("secrets.yml", "r") as file:
     secrets = yaml.safe_load(file)
 
 # Database connection parameters
 params = {
-    'user': secrets['aurora_user'],
-    'password': secrets['aurora_password'],
-    'host': secrets['aurora_url'],
+    "user": secrets["aurora_user"],
+    "password": secrets["aurora_password"],
+    "host": secrets["aurora_url"],
 }
 
 # Connect to the database
@@ -33,13 +33,15 @@ cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
 
 # Create a new table with a geometric column to store the points
 print("Creating table...")
-cur.execute(f"""
+cur.execute(
+    f"""
     CREATE TABLE vectorgeo (
         id BIGSERIAL PRIMARY KEY,
         geom GEOMETRY(Point, 3857),
         embedding vector({c.EMBED_DIM})
     );
-""")
+"""
+)
 
 # Create indices for and spatial coordinates;
 # the vector index is created after the upload is finished

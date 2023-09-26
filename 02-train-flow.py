@@ -59,7 +59,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
     model_filename = Parameter(
         "model_filename",
         help="Filename to save the model to",
-        required=True,        
+        required=True,
     )
 
     device = Parameter(
@@ -97,10 +97,10 @@ class TrainLandCoverTripletFlow(FlowSpec):
         # We don't preprocess as one-hot because the storage is way larger.
         print(f"Unpacking {len(arrays)} arrays...")
 
-        # The shape of the arrays is (N, 3, K, H, W) where the 3 is for 
+        # The shape of the arrays is (N, 3, K, H, W) where the 3 is for
         # anchor, positive, negative and the K is for the different classes.
         xs_one_hot = np.concatenate([unpack_array(xs[:, [0]]) for xs in arrays], axis=0)
-        print(f"Shape of land cover trainin component: {xs_one_hot.shape}")
+        print(f"Shape of land cover training component: {xs_one_hot.shape}")
 
         xs_dem = np.concatenate([xs[:, 1] for xs in arrays], axis=0)
         xs_dem = extend_negatives(xs_dem)
@@ -115,12 +115,13 @@ class TrainLandCoverTripletFlow(FlowSpec):
         print(f"Shape of combined training component: {xs_combined.shape}")
 
         self.input_shape = xs_combined.shape[2:]
+        prep = lambda x: torch.tensor(x, dtype=torch.float32).to(self.device)
         anchors, positives, negatives = (
-            xs_combined[:, 0],
-            xs_combined[:, 1],
-            xs_combined[:, 2],
+            prep(xs_combined[:, 0]),
+            prep(xs_combined[:, 1]),
+            prep(xs_combined[:, 2]),
         )
-        labels = np.zeros((len(anchors), 1))
+        labels = prep(np.zeros((len(anchors), 1)))
         print(
             f"Loaded {len(arrays)} files; resulting stacked array has shape {xs_combined.shape}"
         )
@@ -139,12 +140,6 @@ class TrainLandCoverTripletFlow(FlowSpec):
         )
 
         self.embedding_network.to(self.device)  # Move model to GPU
-
-        # Convert Numpy arrays to PyTorch tensors and move them to GPU
-        anchors = torch.tensor(anchors, dtype=torch.float32).to(self.device)
-        positives = torch.tensor(positives, dtype=torch.float32).to(self.device)
-        negatives = torch.tensor(negatives, dtype=torch.float32).to(self.device)
-        labels = torch.tensor(labels, dtype=torch.float32).to(self.device)
 
         # Create a DataLoader
         dataset = TensorDataset(anchors, positives, negatives, labels)

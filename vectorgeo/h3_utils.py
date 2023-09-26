@@ -9,7 +9,7 @@ class H3GlobalIterator:
     at a seed resolution. Provides the ability to save and restore state.
 
     Example of basic usage:
-    
+
         ```python
         from vectorgeo.h3_utils import H3GlobalIterator
         iterator = H3GlobalIterator(37.7749, -122.4194, 7)

@@ -42,7 +42,6 @@ class H3StencilFlow(FlowSpec):
         """
 
         print("Starting H3 stencil flow for resolution level", self.h3_resolution)
-        
 
         self.next(self.buffer_geoms)
 
@@ -83,15 +82,13 @@ class H3StencilFlow(FlowSpec):
         # f values at the end
         print("Generating all H3 cells")
         hexagons = parallel_map(
-        lambda x: h3.polyfill(
-            x.__geo_interface__,
-            self.h3_resolution,
-            geo_json_conformant=True
-            ), 
-            self.world_gdf.explode().geometry, 
-            )
+            lambda x: h3.polyfill(
+                x.__geo_interface__, self.h3_resolution, geo_json_conformant=True
+            ),
+            self.world_gdf.explode().geometry,
+        )
 
-        self.h3s  = set.union(*hexagons)
+        self.h3s = set.union(*hexagons)
         print(f"After generating all h3s, there are {len(self.h3s)} cells")
 
         self.next(self.stencil)
@@ -157,11 +154,16 @@ class H3StencilFlow(FlowSpec):
         upload_file(f"misc/{filename}", filepath)
         self.next(self.end)
 
-
     @step
     def end(self):
-        print("Done! There are", self.n_h3s, "H3 cells at resolution", self.h3_resolution, "which are on or close to land.")
-        
+        print(
+            "Done! There are",
+            self.n_h3s,
+            "H3 cells at resolution",
+            self.h3_resolution,
+            "which are on or close to land.",
+        )
+
 
 if __name__ == "__main__":
     H3StencilFlow()

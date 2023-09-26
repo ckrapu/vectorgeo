@@ -39,8 +39,6 @@ class AuroraUploadFlow(FlowSpec):
         Wipes the existing Aurora database and creates a new table for the vector data.
         """
 
-        
-
         # Load secrets from the secrets.yml file
         with open("secrets.yml", "r") as file:
             secrets = yaml.safe_load(file)
@@ -159,7 +157,10 @@ class AuroraUploadFlow(FlowSpec):
             # Extract vectors and other necessary information
             print(f"...Uploading {key} to Aurora")
             for df_piece in np.array_split(df, 10):
-                df_piece["x"], df_piece["y"] = transformer.transform(  # pylint: disable=unpacking-non-sequence
+                (
+                    df_piece["x"],
+                    df_piece["y"],
+                ) = transformer.transform(  # pylint: disable=unpacking-non-sequence
                     df_piece["lng"], df_piece["lat"]
                 )
 

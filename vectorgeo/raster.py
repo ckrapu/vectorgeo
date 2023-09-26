@@ -10,11 +10,12 @@ from pyproj import Transformer
 from rasterstats import zonal_stats
 from tqdm import trange
 
+
 def extend_negatives(xs):
     """
     Takes in arrays of anchor-neighbor pairs and extends them to include
     negative examples. The negative examples are simply randomly shuffled
-    versions of the neighbors. This assumes that the shape is 
+    versions of the neighbors. This assumes that the shape is
     (N, C, H, W, 2) where C is the number of classes/channels and the last axis
     is for anchor-neighbor pairs.
     """
@@ -24,6 +25,7 @@ def extend_negatives(xs):
     xs = np.concatenate([xs, xs_neg], axis=-1)
 
     return xs
+
 
 def unpack_array(xs):
     """
@@ -119,8 +121,10 @@ class RasterExtractor:
             if c.LC_MIN_LAT < lat < c.LC_MAX_LAT:
                 # Sample point randomly from disk within radius_meters
                 # of the first point
-                theta, r = np.random.uniform(0, 2 * np.pi), np.random.uniform(min_radius_meters, max_radius_meters)
-                dx, dy = r * np.cos(theta),  r * np.sin(theta)
+                theta, r = np.random.uniform(0, 2 * np.pi), np.random.uniform(
+                    min_radius_meters, max_radius_meters
+                )
+                dx, dy = r * np.cos(theta), r * np.sin(theta)
 
                 # Convert back to lat/long
                 lat_nbr, lng_nbr = self.transform_to_geo.transform(x + dx, y + dy)
@@ -129,8 +133,9 @@ class RasterExtractor:
             else:
                 continue
 
+
 class RasterPatches(RasterExtractor):
-    '''
+    """
     Class for sampling patches from raster data in accordance with triplet loss
     model requirements (anchor, proximal positive/neighbor, and distant negative examples).
 
@@ -149,10 +154,17 @@ class RasterPatches(RasterExtractor):
         ```
 
 
-    
-    '''
+
+    """
+
     def __init__(
-        self, raster_path, gdf, patch_size, sameness_threshold=0.95, full_load=True, pixel_size=100
+        self,
+        raster_path,
+        gdf,
+        patch_size,
+        sameness_threshold=0.95,
+        full_load=True,
+        pixel_size=100,
     ):
         super().__init__(raster_path, gdf, full_load=full_load)
         self.patch_size = patch_size  # e.g., 64 for 64x64 patches
@@ -186,7 +198,7 @@ class RasterPatches(RasterExtractor):
                         (col - half_size, col + half_size),
                     ),
                 )
-                
+
         if patch is None:
             return None
 
@@ -205,7 +217,6 @@ class RasterPatches(RasterExtractor):
         Can generate either single (point, patch) results or pairs of neighboring
         data pairs.
         """
-
 
         if create_pairs:
             min_dist = self.pixel_size * self.patch_size

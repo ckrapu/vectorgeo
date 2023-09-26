@@ -84,7 +84,7 @@ class PreprocessLandCoverFlow(FlowSpec):
         land cover patches and store them as Numpy arrays on S3.
         """
         self.uploaded_filekeys = []
-        
+
         # Initialize patch generators
         print("Creating patch generator...")
         lulc_generator = lc.RasterPatches(
@@ -95,12 +95,14 @@ class PreprocessLandCoverFlow(FlowSpec):
         )
 
         # Generate files with samples
-        print(f"Generating {self.n_files} files with {self.samples_per_file} samples each...")
+        print(
+            f"Generating {self.n_files} files with {self.samples_per_file} samples each..."
+        )
         for file_num in range(self.n_files):
             print(f"...Generating file {file_num + 1} of {self.n_files}...")
-            
+
             # Initialize variables
-            file_id = abs(hash(str(time.time()))) % (10 ** 6)
+            file_id = abs(hash(str(time.time()))) % (10**6)
             lc_patches, lc_patch_nbrs = [], []
             all_pts, all_pt_nbrs = [], []
             dem_patches, dem_patches_nbr = [], []
@@ -130,9 +132,13 @@ class PreprocessLandCoverFlow(FlowSpec):
             patches_array = np.stack([lc_patches, lc_patch_nbrs], axis=-1)
 
             # Remove patches with NaNs or 255s
-            has_nones = np.any(np.isnan(patches_array) | (patches_array == 255), axis=(1, 2, 3, 4))
+            has_nones = np.any(
+                np.isnan(patches_array) | (patches_array == 255), axis=(1, 2, 3, 4)
+            )
             if np.sum(has_nones) > 0:
-                print(f"Found {np.sum(has_nones)} patches with NaNs or 255s; removing them...")
+                print(
+                    f"Found {np.sum(has_nones)} patches with NaNs or 255s; removing them..."
+                )
             patches_array = patches_array[~has_nones]
             patches_array = np.vectorize(self.int_map.get)(patches_array)
 
@@ -153,7 +159,6 @@ class PreprocessLandCoverFlow(FlowSpec):
             self.uploaded_filekeys.append(filename)
 
         self.next(self.join)
-
 
     @step
     def join(self, inputs):
