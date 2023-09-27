@@ -3,7 +3,7 @@ from metaflow import (
     Parameter,  # pylint: disable=no-name-in-module
     step,
 )
-
+import h5py
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,7 +17,18 @@ from vectorgeo import transfer
 from vectorgeo import constants as c
 
 import torch
-from torch.utils.data import DataLoader, TensorDataset
+from torch.utils.data import DataLoader, TensorDataset, IterableDataset
+
+class HDF5IterableDataset(IterableDataset):
+    def __init__(self, hdf5_filepath, batch_size):
+        self.hdf5_filepath = hdf5_filepath
+        self.batch_size = batch_size
+
+    def __iter__(self):
+        with h5py.File(self.hdf5_filepath, 'r') as f:
+            n_samples = len(f['all_data'])
+            for i in range(0, n_samples, self.batch_size):
+                yield torch.tensor(f['all_data'][i:i+self.batch_size], dtype=torch.float32)
 
 
 class TrainLandCoverTripletFlow(FlowSpec):
@@ -30,7 +41,7 @@ class TrainLandCoverTripletFlow(FlowSpec):
 
     epochs = Parameter("epochs", help="Number of epochs to train for", default=20)
 
-    batch_size = Parameter("batch_size", help="Batch size for training", default=64)
+    batch_size = Parameter("batch_size", help="Batch size for training", default=512)
 
     embed_dim = Parameter(
         "embed_dim", help="Dimension of the embedding space", default=16
@@ -65,6 +76,10 @@ class TrainLandCoverTripletFlow(FlowSpec):
     device = Parameter(
         "device", help="Device to use for PyTorch operations", default="cuda"
     )
+    
+    image_size = Parameter(
+        "image_size", help="Dimensions of input image data",
+        default=32)
 
     @step
     def start(self):
@@ -77,59 +92,48 @@ class TrainLandCoverTripletFlow(FlowSpec):
         keys = list(filter(lambda x: x.endswith(".npy"), keys))
         print("Found training data files {} files".format(len(keys)))
 
-        arrays = []
-        n_loaded = 0
-        for key in keys:
-            local_filepath = os.path.join(c.TMP_DIR, os.path.basename(key))
-            transfer.download_file(key, local_filepath)
-            # Read each file in the list and append it to the arrays list
-            arr = np.load(local_filepath)
-            print(f"....Read file at {key} with {np.sum(np.isnan(arr))} NaNs in array")
+        self.image_shape = (3, 24, self.image_size, self.image_size,)
+                
+        n_loaded = 0       
+        self.hdf5_filepath = os.path.join(c.TMP_DIR, 'train.h5') 
+        
+        if os.path.exists(self.hdf5_filepath): os.remove(self.hdf5_filepath)
+            
+        with h5py.File(self.hdf5_filepath, 'w') as f:
+            # Create an expandable dataset in the HDF5 file
+            dset = f.create_dataset("all_data", shape=(0,) + self.image_shape, maxshape=(None,) + self.image_shape, dtype='f4')
 
-            arrays += [arr]
-            n_loaded += len(arr)
+            for key in keys:
+                print(f"Inserting data from file {key} into HDF5 store")
+                local_filepath = os.path.join(c.TMP_DIR, os.path.basename(key))
+                transfer.download_file(key, local_filepath)
+                arr = np.load(local_filepath)
 
-            if n_loaded > self.n_train:
-                print(f"Loaded {n_loaded} samples; stopping")
-                break
+                # Your preprocessing logic here
+                xs_one_hot = unpack_array(arr[:, [0]])
+                xs_dem = arr[:, 1]
+                xs_dem = extend_negatives(xs_dem)
+                xs_dem = np.transpose(xs_dem, (0, 3, 1, 2))[:, :, np.newaxis]
+                xs_combined = np.concatenate([xs_one_hot, xs_dem], axis=2)
 
-        # Convert from integer to one-hot encoding
-        # We don't preprocess as one-hot because the storage is way larger.
-        print(f"Unpacking {len(arrays)} arrays...")
+                # Incrementally save to HDF5
+                new_shape = (dset.shape[0] + xs_combined.shape[0],) + self.image_shape
+                dset.resize(new_shape)
+                dset[-xs_combined.shape[0]:] = xs_combined
+                
+                n_loaded += len(xs_combined)
 
-        # The shape of the arrays is (N, 3, K, H, W) where the 3 is for
-        # anchor, positive, negative and the K is for the different classes.
-        xs_one_hot = np.concatenate([unpack_array(xs[:, [0]]) for xs in arrays], axis=0)
-        print(f"Shape of land cover training component: {xs_one_hot.shape}")
-
-        xs_dem = np.concatenate([xs[:, 1] for xs in arrays], axis=0)
-        xs_dem = extend_negatives(xs_dem)
-
-        # Move last axis to be second and add a singleton dimension
-        # for concatenation with the one-hot encoded data
-        xs_dem = np.transpose(xs_dem, (0, 3, 1, 2))[:, :, np.newaxis]
-
-        print(f"Shape of DEM training component: {xs_dem.shape}")
-
-        xs_combined = np.concatenate([xs_one_hot, xs_dem], axis=2)
-        print(f"Shape of combined training component: {xs_combined.shape}")
-
-        self.input_shape = xs_combined.shape[2:]
-        prep = lambda x: torch.tensor(x, dtype=torch.float32).to(self.device)
-        anchors, positives, negatives = (
-            prep(xs_combined[:, 0]),
-            prep(xs_combined[:, 1]),
-            prep(xs_combined[:, 2]),
-        )
-        labels = prep(np.zeros((len(anchors), 1)))
-        print(
-            f"Loaded {len(arrays)} files; resulting stacked array has shape {xs_combined.shape}"
-        )
-
-        # Save off a select group of images
-        # to use for downstream information content
-        # assessment with PCA
+                if n_loaded > self.n_train:
+                    print(f"Loaded {n_loaded} samples; stopping")
+                    break
+                    
+        # Save these off for later analyses
+        # We pick off the first N examples from the anchor pool
         self.test_batch = xs_combined[0:1024, 0]
+
+        print(f"Loading phase finished with {n_loaded} data samples loaded!")
+        self.input_shape = self.image_shape[1:]
+        
         print("Initializing triplet model...")
         self.embedding_network, optimizer = initialize_triplet(
             self.input_shape,
@@ -140,23 +144,21 @@ class TrainLandCoverTripletFlow(FlowSpec):
         )
 
         self.embedding_network.to(self.device)  # Move model to GPU
-
-        # Create a DataLoader
-        dataset = TensorDataset(anchors, positives, negatives, labels)
-        dataloader = DataLoader(
-            dataset, batch_size=self.batch_size, shuffle=False, drop_last=True
-        )
+        
+        dataset = HDF5IterableDataset(self.hdf5_filepath, self.batch_size)
+        dataloader = DataLoader(dataset, batch_size=None, shuffle=False)
 
         # Training loop
         self.history = {"loss": []}
         print("Beginning training loop...")
         for epoch in range(self.epochs):
-            print(f"Beginning epoch {epoch}...")
-            for batch_anchors, batch_positives, batch_negatives, _ in dataloader:
+            print(f"---Beginning epoch {epoch}...")
+            for batch in dataloader:
                 optimizer.zero_grad()
-                anchor_embedding = self.embedding_network(batch_anchors)
-                positive_embedding = self.embedding_network(batch_positives)
-                negative_embedding = self.embedding_network(batch_negatives)
+                
+                anchor_embedding   = self.embedding_network(batch[:,0].to(self.device))
+                positive_embedding = self.embedding_network(batch[:,1].to(self.device))
+                negative_embedding = self.embedding_network(batch[:,2].to(self.device))
                 merged_vector = torch.cat(
                     [anchor_embedding, positive_embedding, negative_embedding], dim=1
                 )
