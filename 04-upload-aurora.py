@@ -70,7 +70,7 @@ class AuroraUploadFlow(FlowSpec):
         cur.execute(
             f"""
             CREATE TABLE IF NOT EXISTS vectorgeo (
-                id BIGSERIAL PRIMARY KEY,
+                id CHAR(15) PRIMARY KEY,
                 geom GEOMETRY(Point, 3857),
                 embedding vector({c.EMBED_DIM})
             );
@@ -141,22 +141,18 @@ class AuroraUploadFlow(FlowSpec):
         print(f"Found {len(keys)} files to run")
 
         transformer = Transformer.from_crs("epsg:4326", "epsg:3857", always_xy=True)
-        finished = False
-        for key in keys:
-            if finished:
-                break
-
+        
+        while keys:
+            key = keys.pop(0)
             print(f"...Downloading {key} from S3")
-            basename = os.path.basename(key)
-            local_path = os.path.join(c.TMP_DIR, basename)
+            local_path = os.path.join(c.TMP_DIR, os.path.basename(key))
             download_file(key, local_path)
-
-            # Load the data into a Pandas DataFrame
             df = pd.read_parquet(local_path)
 
             # Extract vectors and other necessary information
             print(f"...Uploading {key} to Aurora")
-            for df_piece in np.array_split(df, 10):
+            n_splits = int(np.ceil(len(df) / c.AURORA_UPLOAD_BATCH_SIZE))
+            for df_piece in np.array_split(df, n_splits):
                 (
                     df_piece["x"],
                     df_piece["y"],
@@ -187,7 +183,6 @@ class AuroraUploadFlow(FlowSpec):
                     print(
                         f"Reached maximum number of rows to upload ({self.max_rows_upload}); stopping"
                     )
-                    finished = True
                     break
 
                 print(f"...Uploaded {n_rows_uploaded} rows to {secrets['aurora_url']}")
@@ -196,20 +191,21 @@ class AuroraUploadFlow(FlowSpec):
         print(f"Upload completed; preparing to rebuild the ivfflat index")
         cur.execute(f"SELECT COUNT(*) FROM vectorgeo;")
         n_rows = cur.fetchone()[0]
-        n_lists = int(np.sqrt(n_rows))
+        n_ivf_lists = int(np.sqrt(n_rows))
         print(
-            f"Found {n_rows} rows in the database, using {n_lists} lists for the IVFFlat index"
+            f"Found {n_rows} rows in the database, using {n_ivf_lists} lists for the IVFFlat index"
         )
 
         print(f"Beginning indexing operation - this can take 30 minutes or longer!")
         cur.execute(f"SET maintenance_work_mem TO {self.maintenance_work_mem};")
         cur.execute("DROP INDEX IF EXISTS vector_index;")
         cur.execute(
-            f"CREATE INDEX vector_index ON vectorgeo USING ivfflat (embedding vector_cosine_ops) WITH (lists = {n_lists})"
+            f"CREATE INDEX vector_index ON vectorgeo USING ivfflat (embedding vector_cosine_ops) WITH (lists = {n_ivf_lists})"
         )
         cur.execute("SET maintenance_work_mem TO 1000000;")
-        print(f"Indexing operation complete!")
         conn.commit()
+        print(f"Indexing operation complete!")
+
 
         self.next(self.end)
 
