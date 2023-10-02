@@ -25,6 +25,7 @@ pinecone-client
 pip
 plotly
 plotnine
+psycopg2-binary
 pyarrow
 pydeck
 pylint

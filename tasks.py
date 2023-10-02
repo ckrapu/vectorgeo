@@ -9,7 +9,7 @@ from pyproj import Transformer
 from vectorgeo.constants import (
     S3_BUCKET,
 )  # Assuming this is where your S3_BUCKET is defined
-
+from vectorgeo import transfer
 
 @task
 def s3_size(c):
@@ -41,6 +41,24 @@ def s3_delete_train(c):
     for obj in s3.list_objects_v2(Bucket=S3_BUCKET, Prefix="train/")["Contents"]:
         s3.delete_object(Bucket=S3_BUCKET, Key=obj["Key"])
         print(f"    Deleted {obj['Key']}")
+
+@task
+def s3_download_vectors(c):
+    """
+    Downloads all files in the S3 bucket with keys matching the pattern "vector/" to the directory 'tmp/'.
+    """
+
+    prefix = "vectors/"
+    s3 = boto3.client("s3")
+    if "Contents" not in s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix):
+        print("No files found for download!")
+        return
+
+    for obj in s3.list_objects_v2(Bucket=S3_BUCKET, Prefix=prefix)["Contents"]:
+        filename = obj["Key"].split("/")[-1]
+        transfer.download_file(obj["Key"], f"tmp/{filename}")
+        print(f"    Downloaded {obj['Key']}")
+
 
 
 @task

@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
+import numpy as np
+
 
 class ResBlockConv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size):
@@ -41,11 +43,13 @@ class ResBlockDense(nn.Module):
 
 class ResnetTripletEmbedding(nn.Module):
     def __init__(
-        self, input_shape, K, z_dim, num_filters, n_linear, num_dense_blocks=2
+        self, input_shape, K, z_dim, num_filters, n_linear, num_dense_blocks=2, normalize=True
     ):
         super(ResnetTripletEmbedding, self).__init__()
         C, H, W = input_shape
         self.encoder = nn.Sequential()
+        self.normalize = normalize
+
 
         n_downsamples = 0
         while H > 4:
@@ -75,10 +79,13 @@ class ResnetTripletEmbedding(nn.Module):
     def forward(self, x):
         x = self.encoder(x)
         x = self.dense_blocks(x)
-        return self.output_layer(x)
+
+        if self.normalize:
+            x = F.normalize(self.output_layer(x), dim=1)
+        return x
 
 
-def triplet_loss(y_pred, alpha=0.4, eta=0.1):
+def triplet_loss(y_pred, alpha=0.4):
     total_length = y_pred.shape[1]
     anchor, positive, negative = (
         y_pred[:, : total_length // 3],
@@ -89,16 +96,11 @@ def triplet_loss(y_pred, alpha=0.4, eta=0.1):
     pos_dist = torch.sum((anchor - positive) ** 2, dim=1)
     neg_dist = torch.sum((anchor - negative) ** 2, dim=1)
 
-    l2_reg = (
-        torch.sum(anchor**2, dim=1)
-        + torch.sum(positive**2, dim=1)
-        + torch.sum(negative**2, dim=1)
-    )
+    basic_loss = F.relu(pos_dist - neg_dist + alpha)
 
-    basic_loss = pos_dist - neg_dist + alpha
-    loss = torch.sum(F.relu(basic_loss)) + eta * torch.sum(l2_reg)
+    loss = torch.sum(basic_loss)
 
-    return loss
+    return loss, pos_dist, neg_dist
 
 
 def initialize_triplet(input_shape, n_conv_blocks, embed_dim, num_filters, n_linear):
@@ -108,3 +110,18 @@ def initialize_triplet(input_shape, n_conv_blocks, embed_dim, num_filters, n_lin
     optimizer = torch.optim.Adam(embedding_network.parameters())
 
     return embedding_network, optimizer
+
+
+def early_stopping(loss_history, tolerance=0.05, patience=3):
+    """
+    Check if the loss has converged. Uses the rolling mean of the loss over the last
+    `patience` iterations to determine if the loss has converged. If the loss has
+    converged, returns True. Otherwise, returns False.
+    """
+    if len(loss_history) < patience:
+        return False
+    
+    if len(loss_history) > 2 * patience:
+        loss_history = loss_history[-patience:]
+
+    return np.mean(loss_history[-patience:]) - np.mean(loss_history[-2*patience:-patience]) < tolerance
