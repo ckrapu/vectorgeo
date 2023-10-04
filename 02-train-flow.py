@@ -338,10 +338,22 @@ class TrainLandCoverTripletFlow(FlowSpec):
         # needed to reach threshold of variance explained
         variance_threshold = 0.99
         variance_explained = np.cumsum(pca.explained_variance_ratio_)
+
+        # For all principal components, print out the variance explained
+        print("Variance explained by each principal component:")
+        for i, variance in enumerate(pca.explained_variance_ratio_):
+            print(f"    PC{i}: {variance:.4f}")
+
+
         n_components = np.where(variance_explained > variance_threshold)[0][0]
         print(
             f"Number of components needed to reach {variance_threshold} variance explained: {n_components}"
         )
+
+        # Print standard deviation per dimension
+        print("Standard deviation per dimension:")
+        for i in range(self.embed_dim):
+            print(f"    Dimension {i}: {np.std(zs_pca[:, i]):.2f}")
 
         # Generate a plot showing the activity of each dimension before/after PCA
         # Create a figure
