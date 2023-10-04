@@ -13,12 +13,15 @@ from tqdm import trange
 
 def normalize_dem(dem_batch):
     """
-    Takes in batch of DEM data with shape (N, 1 , H, W) and normalizes it to 
+    Takes in batch of DEM data with shape ()... H, W) and normalizes it to 
     be between 0-1
     """
 
-    minima = dem_batch.min(axis=(2, 3), keepdims=True)
-    maxima = dem_batch.max(axis=(2, 3), keepdims=True)
+    # Get the indices of the last two dimensions
+    idx_pair = tuple(np.arange(dem_batch.ndim - 2, dem_batch.ndim))
+
+    minima = dem_batch.min(axis=idx_pair, keepdims=True)
+    maxima = dem_batch.max(axis=idx_pair, keepdims=True)
     
     return (dem_batch - minima) / (1e-6 + maxima - minima)
 
@@ -294,3 +297,9 @@ class RasterPatches(RasterExtractor):
         """
         lat, lng = h3.h3_to_geo(h3_index)
         return self.extract_patch((lng, lat))
+    
+    def extend(self, raster_path, pixel_size):
+        """
+        Adds another raster to the stack of rasters for which patches should be extracted.     
+        """
+        
