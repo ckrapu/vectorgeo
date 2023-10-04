@@ -13,7 +13,7 @@ from metaflow import FlowSpec, Parameter, step
 import vectorgeo.constants as c
 import vectorgeo.transfer as transfer
 
-from vectorgeo.raster import RasterPatches
+from vectorgeo.raster import RasterPatches, normalize_dem
 
 
 class InferenceLandCoverFlow(FlowSpec):
@@ -53,6 +53,20 @@ class InferenceLandCoverFlow(FlowSpec):
     device = Parameter(
         "device", help="Device to use for PyTorch operations", default="cuda"
     )
+
+    start_h3 = Parameter(
+        "start_h3", help="H3 index to start inference from", default=None
+    )
+
+    def upload_vec_batch(self, batch):
+        print(f"Uploading batch of {len(batch)} rows to S3")
+
+        file_id = f"{batch[0]['id']}-{batch[-1]['id']}"
+        filename = f"vector-upload-lcd-{file_id}.parquet"
+        filepath = os.path.join(c.TMP_DIR, filename)
+
+        pd.DataFrame(batch).to_parquet(filepath)
+        transfer.upload_file(f"vectors/{filename}", filepath)
 
     @step
     def start(self):
@@ -100,8 +114,6 @@ class InferenceLandCoverFlow(FlowSpec):
         int_map = {x: i for i, x in enumerate(c.LC_LEGEND.keys())}
         int_map_fn = np.vectorize(int_map.get)
 
-        state_filepath = os.path.join(c.TMP_DIR, c.H3_STATE_FILENAME)
-
         h3_filename = f"h3s-processed-{self.h3_resolution}.json"
         h3_filepath = os.path.join(c.TMP_DIR, h3_filename)
         h3_key = f"misc/{h3_filename}"
@@ -121,11 +133,21 @@ class InferenceLandCoverFlow(FlowSpec):
         start_time = time.time()
         print("Starting first iteration...")
         n_cells = len(valid_h3s)
+
+        if self.start_h3 and self.start_h3 in valid_h3s:
+            print(f"Starting from H3 index {self.start_h3}")
+            start_idx = valid_h3s.index(self.start_h3)
+            valid_h3s = valid_h3s[start_idx:]
+
+        elif self.start_h3 and self.start_h3 not in valid_h3s:
+            print(f"Start h3 {self.start_h3} not in valid h3s; starting from beginning")
+
+        good_count, bad_count = 0, 0
+
         for i, cell in enumerate(valid_h3s):
             if i % 1_000_000 == 0 and i > 0:
                 iter_rate = i / (time.time() - start_time)
                 print(f"Processing cell {cell} ({i}/{n_cells}) with inference rate: {iter_rate:.1f} iterations per second")
-                transfer.upload_file(c.H3_STATE_KEY, state_filepath)
 
             if self.max_iters and i >= int(self.max_iters):
                 print(f"Reached max_iters {self.max_iters}; stopping")
@@ -136,13 +158,20 @@ class InferenceLandCoverFlow(FlowSpec):
             try:
                 xs_lc  = int_map_fn(lc_generator.h3_to_patch(cell))
                 xs_dem = dem_generator.h3_to_patch(cell)
+                xs_dem = normalize_dem(xs_dem)
+                xs_dem = np.expand_dims(xs_dem, axis=0)
+                good_count += 1
             except Exception as e:
-                print(
-                    f"Found anomalous cell {cell} with error {e}. This cell will be skipped."
-                )
+                #print(
+                #    f"Found anomalous cell {cell} with error {e}. This cell will be skipped."
+                #)
+                bad_count += 1
                 continue
 
-            xs_dem -= np.min(xs_dem)
+            if i % 1000 == 0:
+                print(f"Good: {good_count}, Bad: {bad_count}, Ratio: {good_count / (good_count + bad_count):.3f}")
+
+            
             xs_one_hot = np.zeros((c.LC_N_CLASSES, self.image_size, self.image_size))
 
             for j in range(c.LC_N_CLASSES):
@@ -165,25 +194,22 @@ class InferenceLandCoverFlow(FlowSpec):
 
                 coords = [h3.h3_to_geo(h3_index) for h3_index in h3_batch]
 
+                lats, lngs = zip(*coords)
+
                 upload_batch += [
                     {"id": id, "vector": vector, "lat": lat, "lng": lng}
-                    for id, vector, lng, lat in zip(h3_batch, zs_batch, *coords)
+                    for id, vector, lng, lat in zip(h3_batch, zs_batch, lngs, lats)
                 ]
 
                 self.h3s_processed = self.h3s_processed.union(set(h3_batch))
                 h3_batch, xs_batch = [], []
 
             if len(upload_batch) >= c.INFERENCE_UPLOAD_BATCH_SIZE:
-                print(f"Uploading batch of {len(upload_batch)} rows to S3")
-
-                file_id = f"{upload_batch[0]['id']}-{upload_batch[-1]['id']}"
-                filename = f"vector-upload-{file_id}.parquet"
-                filepath = os.path.join(c.TMP_DIR, filename)
-
-                pd.DataFrame(upload_batch).to_parquet(filepath)
-                transfer.upload_file(f"vectors/{filename}", filepath)
+                self.upload_vec_batch(upload_batch)
                 upload_batch = []
 
+        else:
+            self.upload_vec_batch(upload_batch)
         self.next(self.end)
 
     @step
