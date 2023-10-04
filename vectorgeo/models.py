@@ -85,7 +85,7 @@ class ResnetTripletEmbedding(nn.Module):
         return x
 
 
-def triplet_loss(y_pred, alpha=0.4):
+def triplet_loss(y_pred, alpha=1.0):
     total_length = y_pred.shape[1]
     anchor, positive, negative = (
         y_pred[:, : total_length // 3],
