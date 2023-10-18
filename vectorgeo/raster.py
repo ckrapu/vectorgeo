@@ -11,6 +11,20 @@ from rasterstats import zonal_stats
 from tqdm import trange
 
 
+def normalize_dem(dem_batch):
+    """
+    Takes in batch of DEM data with shape ()... H, W) and normalizes it to 
+    be between 0-1
+    """
+
+    # Get the indices of the last two dimensions
+    idx_pair = tuple(np.arange(dem_batch.ndim - 2, dem_batch.ndim))
+
+    minima = dem_batch.min(axis=idx_pair, keepdims=True)
+    maxima = dem_batch.max(axis=idx_pair, keepdims=True)
+    
+    return (dem_batch - minima) / (1e-6 + maxima - minima)
+
 def extend_negatives(xs):
     """
     Takes in arrays of anchor-neighbor pairs and extends them to include
@@ -231,8 +245,10 @@ class RasterPatches(RasterExtractor):
 
         if patch is None:
             return None
-
-        homogeneity = np.unique(patch, return_counts=True)[1].max() / patch.size
+        try:
+            homogeneity = np.unique(patch, return_counts=True)[1].max() / patch.size
+        except ValueError:
+            print(f"ValueError encountered, patch is {patch}")
 
         if (
             patch.shape == (self.patch_size, self.patch_size)
@@ -281,3 +297,9 @@ class RasterPatches(RasterExtractor):
         """
         lat, lng = h3.h3_to_geo(h3_index)
         return self.extract_patch((lng, lat))
+    
+    def extend(self, raster_path, pixel_size):
+        """
+        Adds another raster to the stack of rasters for which patches should be extracted.     
+        """
+        

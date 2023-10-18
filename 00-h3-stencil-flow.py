@@ -61,7 +61,7 @@ class H3StencilFlow(FlowSpec):
         # tolerance to make sure that locations on land in the original
         # geometry are still on land after the simplification
         print("Simplifying and buffering world geometry")
-        world_gdf.geometry = world_gdf.simplify(0.1).buffer(0.2)
+        world_gdf.geometry = world_gdf.buffer(0.01)
 
         # File should already be in geographic CRS -
         # this is just to be sure.

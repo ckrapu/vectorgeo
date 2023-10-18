@@ -9,7 +9,7 @@ import time
 import numpy as np
 import geopandas as gpd
 import os
-from vectorgeo import raster as lc
+from vectorgeo import raster
 from vectorgeo import constants as c
 from vectorgeo import transfer
 
@@ -87,10 +87,10 @@ class PreprocessLandCoverFlow(FlowSpec):
 
         # Initialize patch generators
         print("Creating patch generator...")
-        lulc_generator = lc.RasterPatches(
+        lulc_generator = raster.RasterPatches(
             c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, c.LC_RES_M, full_load=self.full_load
         )
-        dem_generator = lc.RasterPatches(
+        dem_generator = raster.RasterPatches(
             c.DEM_LOCAL_PATH, self.world_gdf, self.patch_size, c.DEM_RES_M, full_load=self.full_load
         )
 
@@ -113,10 +113,6 @@ class PreprocessLandCoverFlow(FlowSpec):
             ):
                 dem_patch = dem_generator.extract_patch(pt)
                 dem_patch_nbr = dem_generator.extract_patch(pt_nbr)
-
-                # Normalize DEM patches to have zero minima
-                dem_patch -= np.min(dem_patch)
-                dem_patch_nbr -= np.min(dem_patch_nbr)
 
                 # Skip if any patch is None
                 if any(x is None for x in [dem_patch, dem_patch_nbr, patch, patch_nbr]):
@@ -147,8 +143,8 @@ class PreprocessLandCoverFlow(FlowSpec):
             patches_array = np.vectorize(self.int_map.get)(patches_array)
 
             # Reshape and stack DEM arrays
-            dem_patches = np.array(dem_patches).reshape(*out_shape)
-            dem_patches_nbr = np.array(dem_patches_nbr).reshape(*out_shape)
+            dem_patches     = raster.normalize_dem(np.array(dem_patches).reshape(*out_shape))
+            dem_patches_nbr = raster.normalize_dem(np.array(dem_patches_nbr).reshape(*out_shape))
             dem_patches_array = np.stack([dem_patches, dem_patches_nbr], axis=-1)
 
             # Concatenate landcover and DEM arrays
@@ -267,10 +263,10 @@ class PreprocessLandCoverFlow(FlowSpec):
 
         # Initialize patch generators
         print("Creating patch generator...")
-        lulc_generator = lc.RasterPatches(
+        lulc_generator = raster.RasterPatches(
             c.LC_LOCAL_PATH, self.world_gdf, self.patch_size, c.LC_RES_M, full_load=self.full_load
         )
-        dem_generator = lc.RasterPatches(
+        dem_generator = raster.RasterPatches(
             c.DEM_LOCAL_PATH, self.world_gdf, self.patch_size, c.DEM_RES_M, full_load=self.full_load
         )
 
@@ -323,13 +319,13 @@ class PreprocessLandCoverFlow(FlowSpec):
             patches_array = np.vectorize(self.int_map.get)(patches_array)
 
             # Reshape and stack DEM arrays
-            dem_patches = np.array(dem_patches).reshape(*out_shape)
-            dem_patches_nbr = np.array(dem_patches_nbr).reshape(*out_shape)
+            dem_patches       = np.array(dem_patches[~has_nones]).reshape(*out_shape)
+            dem_patches_nbr   = np.array(dem_patches_nbr[~has_nones]).reshape(*out_shape)
             dem_patches_array = np.stack([dem_patches, dem_patches_nbr], axis=-1)
 
             # Concatenate landcover and DEM arrays
-            patches_array = np.concatenate([patches_array, dem_patches_array], axis=1)
-
+            patches_array = np.concatenate([patches_array, dem_patches_array], axis=1).astype(np.float32)
+            
             # Save and upload the file
             filename = f"lc-dem-patches-pairs-{self.patch_size}x{self.patch_size}-{file_id}.npy"
             filepath = os.path.join(c.TMP_DIR, filename)
