@@ -3,7 +3,7 @@
 # VectorGeo
 `vectorgeo` performs the data engineering, model training, and inference routines for producing a globally-available geospatial vector embedding data product for use in machine learning for Earth & environment and geographic similarity search. Broadly, the architecture is composed of several parts:
 
-- Data cleaning, extraction, and feature engineering is conducted in Metaflow using Copernicus Land Cover data
+- Data cleaning, extraction, and feature engineering is conducted in Metaflow using Copernicus Land Cover and GMTED digital elevation model data
 - Model training and inference is done using Keras in MetaFlow
 - Results are served from Aurora PostgreSQL, making use of the `pgvector` and PostGIS functionality unavailable in Pinecone, Weaviate, or other vector DB providers
 

@@ -9,7 +9,6 @@ from metaflow import FlowSpec, step, Parameter, parallel_map
 from rasterio import features
 from tqdm import tqdm
 
-from vectorgeo.h3_utils import generate_h3_indexes_at_resolution
 from vectorgeo.transfer import upload_file, download_file
 from vectorgeo import constants as c
 
