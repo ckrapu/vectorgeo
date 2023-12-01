@@ -39,7 +39,7 @@ class ResBlockConv(nn.Module):
         out += identity
 
         # Add SE block
-        out = SEBlock(out.shape[1])(out)
+        #out = SEBlock(out.shape[1])(out)
 
         return out
 
@@ -60,8 +60,8 @@ class ResBlockDense(nn.Module):
         out = self.bn2(out)
         out += identity
 
-        out = SEBlock(out.shape[1])(out)
-        
+        #out = SEBlock(out.shape[1])(out)
+
         return F.relu(out)
 
 
