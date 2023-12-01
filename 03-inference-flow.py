@@ -135,9 +135,12 @@ class InferenceLandCoverFlow(FlowSpec):
         n_cells = len(valid_h3s)
 
         if self.start_h3 and self.start_h3 in valid_h3s:
-            print(f"Starting from H3 index {self.start_h3}")
             start_idx = valid_h3s.index(self.start_h3)
             valid_h3s = valid_h3s[start_idx:]
+
+            percentage_start = start_idx / n_cells * 100
+            print(f"Starting from H3 index {self.start_h3} with {percentage_start:.1f}% of cells skipped")
+            
 
         elif self.start_h3 and self.start_h3 not in valid_h3s:
             print(f"Start h3 {self.start_h3} not in valid h3s; starting from beginning")
@@ -168,7 +171,7 @@ class InferenceLandCoverFlow(FlowSpec):
                 bad_count += 1
                 continue
 
-            if i % 1000 == 0:
+            if i % 100_000 == 0:
                 print(f"Good: {good_count}, Bad: {bad_count}, Ratio: {good_count / (good_count + bad_count):.3f}")
 
             
