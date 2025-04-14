@@ -21,15 +21,35 @@ You can access the web viewer for this data product at https://louisquissetlabs.
 Clone the repository using these commands:
 
 ```
-token=$(python -c "import yaml; print(yaml.safe_load(open('secrets.yml'))['git_token'])")
-git clone https://$token@github.com/ckrapu/vectorgeo.git
-
+git clone https://github.com/ckrapu/vectorgeo.git
 pip3 install pyOpenSSL --upgrade
 cd vectorgeo
 pip3 install -r requirements.txt
 ```
 
 This repository was designed to run its most intensive pieces on a Lambda Labs A10 instance with 192GB of RAM and 30 cores. Individual parts of this workflow such as the preprocess and upload may work on smaller machines.
+
+## Setting up secrets.yml
+This project requires a `secrets.yml` file with various credentials to access AWS services, Lambda Labs, and GitHub. For security reasons, this file is not included in the repository.
+
+1. Copy the example file to create your own secrets file:
+   ```
+   cp secrets.yml.example secrets.yml
+   ```
+
+2. Edit the `secrets.yml` file and replace the placeholder values with your actual credentials:
+   ```
+   aws_access_key_id: YOUR_AWS_ACCESS_KEY_ID
+   aws_secret_access_key: YOUR_AWS_SECRET_ACCESS_KEY
+   lambdalabs_api_key: YOUR_LAMBDA_LABS_API_KEY
+
+   aurora_url: YOUR_AURORA_URL
+   aurora_password: YOUR_AURORA_PASSWORD
+   aurora_user: YOUR_AURORA_USER
+   aurora_db: YOUR_AURORA_DB
+
+   git_token: YOUR_GITHUB_TOKEN
+   ```
 
 
 ## Files & data transfer
